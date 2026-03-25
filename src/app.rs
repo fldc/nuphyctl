@@ -27,7 +27,7 @@ pub fn run(cli: Cli, api: &HidApi) -> Result<()> {
             Ok(())
         }
         Command::Rgb(rgb) => match rgb.action {
-            RgbSubcommand::Set(args) => run_rgb_set(api, &args.device, &args.hex),
+            RgbSubcommand::Set(args) => run_rgb_set(api, &args.device, &args.hex, args.brightness),
         },
         Command::Raw(raw) => match raw.action {
             RawSubcommand::Send(args) => run_raw_send(api, &args.device, args.report_id, &args.hex),
@@ -35,28 +35,35 @@ pub fn run(cli: Cli, api: &HidApi) -> Result<()> {
     }
 }
 
-fn run_rgb_set(api: &HidApi, selector: &DeviceSelector, color_hex: &str) -> Result<()> {
+fn run_rgb_set(
+    api: &HidApi,
+    selector: &DeviceSelector,
+    color_hex: &str,
+    brightness: u8,
+) -> Result<()> {
     let (color, normalized_hex) = RgbColor::from_hex(color_hex)?;
 
     for attempt in 1..=RGB_SET_MAX_ATTEMPTS {
-        match run_rgb_set_once(api, selector, color) {
+        match run_rgb_set_once(api, selector, color, brightness) {
             Ok(session_key) => {
                 if attempt == 1 {
                     println!(
-                        "sent static color {} (rgb={}, {}, {} key=0x{:02x})",
+                        "sent static color {} (rgb={}, {}, {} brightness={} key=0x{:02x})",
                         normalized_hex,
                         color.r,
                         color.g,
                         color.b,
+                        brightness,
                         session_key.value(),
                     );
                 } else {
                     println!(
-                        "sent static color {} (rgb={}, {}, {} key=0x{:02x}) after retry {}",
+                        "sent static color {} (rgb={}, {}, {} brightness={} key=0x{:02x}) after retry {}",
                         normalized_hex,
                         color.r,
                         color.g,
                         color.b,
+                        brightness,
                         session_key.value(),
                         attempt,
                     );
@@ -86,12 +93,13 @@ fn run_rgb_set_once(
     api: &HidApi,
     selector: &DeviceSelector,
     color: RgbColor,
+    brightness: u8,
 ) -> Result<SessionKey> {
     let dev = open_selected_device(api, selector)?;
     clear_input_reports(&dev)?;
 
     let protocol = KeyboardProtocol::new(&dev)?;
-    protocol.set_static_rgb(color)?;
+    protocol.set_static_rgb(color, brightness)?;
 
     Ok(protocol.session_key())
 }

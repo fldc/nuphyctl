@@ -20,7 +20,6 @@ const MAIN_BRIGHTNESS_OFFSET: u16 = 1;
 const SET_DATA_WINDOW_SIZE: u8 = 1;
 
 const STATIC_LIGHT_EFFECT: u8 = 3;
-const STATIC_LIGHT_BRIGHTNESS: u8 = 100;
 const STATIC_LIGHT_COLOR_MODE: u8 = 2;
 
 type KeyExchangePayload = [u8; KEY_EXCHANGE_PAYLOAD_LEN];
@@ -56,10 +55,10 @@ impl<'a> KeyboardProtocol<'a> {
         self.session_key
     }
 
-    pub fn set_static_rgb(&self, color: RgbColor) -> Result<()> {
+    pub fn set_static_rgb(&self, color: RgbColor, brightness: u8) -> Result<()> {
         let light_payload = [
             STATIC_LIGHT_EFFECT,
-            STATIC_LIGHT_BRIGHTNESS,
+            brightness,
             STATIC_LIGHT_COLOR_MODE,
             0,
             0,
@@ -76,7 +75,7 @@ impl<'a> KeyboardProtocol<'a> {
         )
         .context("failed to send RGB main-light packet")?;
 
-        let brightness_payload = [STATIC_LIGHT_BRIGHTNESS];
+        let brightness_payload = [brightness];
         self.send_set_data(
             SUBCMD_MAIN_BRIGHTNESS,
             MAIN_BRIGHTNESS_OFFSET,

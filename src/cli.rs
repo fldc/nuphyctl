@@ -57,6 +57,10 @@ pub struct RgbSetArgs {
     #[arg(long)]
     pub hex: String,
 
+    /// Brightness in percent (0-100)
+    #[arg(long, default_value_t = 100, value_parser = clap::value_parser!(u8).range(0..=100))]
+    pub brightness: u8,
+
     #[command(flatten)]
     pub device: DeviceSelector,
 }
