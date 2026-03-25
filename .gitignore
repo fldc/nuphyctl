@@ -1,2 +1,7 @@
 target/
 **/*.rs.bk
+
+# Local automation and browser-debug artifacts
+.playwright-cli/
+.playwright/
+.agents/
