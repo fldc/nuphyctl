@@ -123,6 +123,10 @@ impl RgbSideEffect {
             Self::Rhythm => "Rhythm",
         }
     }
+
+    pub const fn supports_custom_color(self) -> bool {
+        matches!(self, Self::Static | Self::Breathe)
+    }
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
@@ -201,9 +205,9 @@ pub struct RgbSideSetArgs {
     #[arg(long, value_enum, default_value_t = RgbSideEffect::Static)]
     pub effect: RgbSideEffect,
 
-    /// Color in #RRGGBB or RRGGBB format
+    /// Color in #RRGGBB or RRGGBB format (optional for non-color effects)
     #[arg(long)]
-    pub hex: String,
+    pub hex: Option<String>,
 
     /// Brightness in percent (0-100)
     #[arg(long, default_value_t = 100, value_parser = clap::value_parser!(u8).range(0..=100))]
@@ -231,9 +235,9 @@ pub struct RgbDecorativeSetArgs {
     #[arg(long, value_enum, default_value_t = RgbSideEffect::Static)]
     pub effect: RgbSideEffect,
 
-    /// Color in #RRGGBB or RRGGBB format
+    /// Color in #RRGGBB or RRGGBB format (optional for non-color effects)
     #[arg(long)]
-    pub hex: String,
+    pub hex: Option<String>,
 
     /// Brightness in percent (0-100)
     #[arg(long, default_value_t = 100, value_parser = clap::value_parser!(u8).range(0..=100))]

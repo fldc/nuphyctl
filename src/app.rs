@@ -49,7 +49,7 @@ pub fn run(cli: Cli, api: &HidApi) -> Result<()> {
                 api,
                 &args.device,
                 args.effect,
-                &args.hex,
+                args.hex.as_deref(),
                 args.brightness,
                 args.speed,
                 args.color_mode,
@@ -59,7 +59,7 @@ pub fn run(cli: Cli, api: &HidApi) -> Result<()> {
                 api,
                 &args.device,
                 args.effect,
-                &args.hex,
+                args.hex.as_deref(),
                 args.brightness,
                 args.speed,
                 args.color_mode,
@@ -178,13 +178,13 @@ fn run_rgb_side(
     api: &HidApi,
     selector: &DeviceSelector,
     effect: RgbSideEffect,
-    color_hex: &str,
+    color_hex: Option<&str>,
     brightness: u8,
     speed: u8,
     color_mode: RgbColorMode,
     palette_index: u8,
 ) -> Result<()> {
-    let (color, normalized_hex) = RgbColor::from_hex(color_hex)?;
+    let (color, normalized_hex) = parse_effect_color(effect, color_hex)?;
 
     for attempt in 1..=RGB_SET_MAX_ATTEMPTS {
         match run_rgb_side_once(
@@ -267,14 +267,14 @@ fn run_rgb_decorative(
     api: &HidApi,
     selector: &DeviceSelector,
     effect: RgbSideEffect,
-    color_hex: &str,
+    color_hex: Option<&str>,
     brightness: u8,
     speed: u8,
     color_mode: RgbColorMode,
     palette_index: u8,
     base_offset: u16,
 ) -> Result<()> {
-    let (color, normalized_hex) = RgbColor::from_hex(color_hex)?;
+    let (color, normalized_hex) = parse_effect_color(effect, color_hex)?;
 
     for attempt in 1..=RGB_SET_MAX_ATTEMPTS {
         match run_rgb_decorative_once(
@@ -389,6 +389,24 @@ fn is_retryable_rgb_error(err: &anyhow::Error) -> bool {
             .iter()
             .any(|pattern| msg.contains(pattern))
     })
+}
+
+fn parse_effect_color(
+    effect: RgbSideEffect,
+    color_hex: Option<&str>,
+) -> Result<(RgbColor, String)> {
+    if let Some(hex) = color_hex {
+        return RgbColor::from_hex(hex);
+    }
+
+    if effect.supports_custom_color() {
+        bail!(
+            "--hex is required for {} effect (this effect uses custom RGB color)",
+            effect.display_name()
+        );
+    }
+
+    Ok((RgbColor { r: 0, g: 0, b: 0 }, String::from("auto")))
 }
 
 fn print_commands() {
