@@ -1,6 +1,6 @@
 # nuphyctl
 
-CLI for sending NuPhy HID RGB commands.
+CLI for sending NuPhy keyboard HID commands.
 
 ## Build
 
@@ -58,6 +58,4 @@ cargo run -- raw send --hex "55d600936565646500000000000000000000000000000000000
 
 Detailed protocol notes and DevTools workflow are in:
 
-- `docs/reverse-engineering.md`
-
-This keeps the main README focused on build and usage.
+- [docs/reverse-engineering.md](docs/reverse-engineering.md)
