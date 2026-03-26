@@ -15,11 +15,59 @@ Use this workflow when adding controls like effect mode, speed, per-key behavior
 - Write packets (`55 d6` / `55 d5`) XOR-encode command payload bytes with the current session key.
 - Checksum is packet byte `3`: wrapping sum of bytes `4..63`.
 
-Static RGB flow used by this CLI:
+RGB flow used by this CLI:
 
-1. `SET_DATA` (`0xd6`) subcommand `0x09` with payload `[effect, brightness, color_mode, 0, 0, 0, r, g, b]`
-2. `SET_DATA` (`0xd6`) subcommand `0x01` for brightness
-3. `APPLY` (`0xd5`) subcommand `0x11`
+1. Main light: `SET_DATA` (`0xd6`) subcommand `0x09` offset `0` payload `[effect, brightness, speed, direction, mode_flag, palette, r, g, b]`
+2. Side light: `SET_DATA` (`0xd6`) subcommand `0x08` offset `9` payload `[effect, brightness, speed, mode_flag, palette, r, g, b]`
+3. Brightness mirror writes use subcommand `0x01` at offsets `1` (main) and `10` (side)
+
+Current CLI behavior:
+
+- Main light uses legacy explicit apply (`0xd5`) for compatibility.
+- Side and decorative writes currently skip explicit apply (matches observed GUI behavior in current web app traces).
+
+Main-light effect mapping captured from NuPhy Drive (Air75 V3, Lighting Effects list order):
+
+- `1=Ray`
+- `2=Stair`
+- `3=Static`
+- `4=Breath`
+- `5=Flower`
+- `6=Wave`
+- `7=Ripple`
+- `8=Spout`
+- `9=Galaxy`
+- `10=Rotation`
+- `11=Ripple` (second entry in UI, exposed as `ripple2` in CLI)
+- `12=Point`
+- `13=Grid`
+- `14=Time`
+- `15=Rain`
+- `16=Ribbon`
+- `17=Gaming`
+- `18=Identify`
+- `19=Windmill`
+- `20=Diagonal`
+
+Observed payload nuance from GUI capture:
+
+- In the newer legacy-addressed path (`sub=0x09`, `offset=0`), payload shape is `[effect, brightness, speed, direction, mode_flag, palette, r, g, b]`.
+- `direction`: left=`1`, right=`0`.
+- Main-light `mode_flag`: custom color=`1`, preset palette=`0`.
+- Side-light `mode_flag`: custom color=`0`, preset palette=`1`.
+
+Side-light effect mapping captured from NuPhy Drive:
+
+- `0=Time`
+- `1=Neon`
+- `2=Static`
+- `3=Breathe`
+- `4=Rhythm`
+
+Decorative/strip/front-light notes:
+
+- Device families differ; the GUI bundle exposes both 2-channel and 3-channel layouts.
+- Third channel offsets are model-dependent; `17` and `35` are known candidates from traces/bundle analysis.
 
 ## 1) Capture packets in Chrome
 

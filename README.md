@@ -16,11 +16,47 @@ List HID devices:
 cargo run -- list
 ```
 
-Set static color (`#RRGGBB`):
+List all available command paths:
+
+```bash
+cargo run -- commands
+```
+
+Set RGB effect and color (`#RRGGBB`):
 
 ```bash
 cargo run -- rgb set --hex ff0000
 ```
+
+Backlight supports speed, direction, and color source:
+
+```bash
+cargo run -- rgb set --effect wave --hex 00aaff --speed 3 --direction left --color-mode custom
+```
+
+Select a specific lighting effect from NuPhy Drive:
+
+```bash
+cargo run -- rgb set --effect wave --hex 00aaff
+```
+
+Available effects: `ray`, `stair`, `static`, `breath`, `flower`, `wave`, `ripple`, `spout`, `galaxy`, `rotation`, `ripple2`, `point`, `grid`, `time`, `rain`, `ribbon`, `gaming`, `identify`, `windmill`, `diagonal`.
+
+Set side-light effect:
+
+```bash
+cargo run -- rgb side --effect neon --hex ffffff --brightness 70 --speed 2
+```
+
+Side-light effects: `time`, `neon`, `static`, `breathe`, `rhythm`.
+
+Set decorative/strip light effect (experimental, model-dependent offsets):
+
+```bash
+cargo run -- rgb decorative --effect static --hex ff8800 --base-offset 17
+```
+
+If your model uses a different decorative channel offset, override `--base-offset` (common values observed: `17` for some 2-channel layouts, `35` for 3-channel layouts).
 
 Set static color with brightness (`0-100`):
 

@@ -1,3 +1,4 @@
+use crate::cli::{RgbColorMode, RgbDirection, RgbEffect, RgbSideEffect};
 use crate::color::RgbColor;
 use crate::hid_transport::{HidResponder, Report, REPORT_LEN};
 use anyhow::{bail, Context, Result};
@@ -12,15 +13,14 @@ const CMD_APPLY: u8 = 0xd5;
 const CMD_KEY_EXCHANGE: u8 = 0xee;
 
 const SUBCMD_MAIN_LIGHT: u8 = 0x09;
+const SUBCMD_SIDE_LIGHT: u8 = 0x08;
 const SUBCMD_MAIN_BRIGHTNESS: u8 = 0x01;
 const SUBCMD_APPLY: u8 = 0x11;
 
 const MAIN_LIGHT_OFFSET: u16 = 0;
+const SIDE_LIGHT_OFFSET: u16 = 9;
 const MAIN_BRIGHTNESS_OFFSET: u16 = 1;
 const SET_DATA_WINDOW_SIZE: u8 = 1;
-
-const STATIC_LIGHT_EFFECT: u8 = 3;
-const STATIC_LIGHT_COLOR_MODE: u8 = 2;
 
 type KeyExchangePayload = [u8; KEY_EXCHANGE_PAYLOAD_LEN];
 
@@ -55,18 +55,26 @@ impl<'a> KeyboardProtocol<'a> {
         self.session_key
     }
 
-    pub fn set_static_rgb(&self, color: RgbColor, brightness: u8) -> Result<()> {
-        let light_payload = [
-            STATIC_LIGHT_EFFECT,
+    pub fn set_main_light(
+        &self,
+        effect: RgbEffect,
+        color: RgbColor,
+        brightness: u8,
+        speed: u8,
+        direction: RgbDirection,
+        color_mode: RgbColorMode,
+        palette_index: u8,
+    ) -> Result<()> {
+        let effect_id = effect.protocol_id();
+        let light_payload = build_main_light_payload(
+            effect_id,
             brightness,
-            STATIC_LIGHT_COLOR_MODE,
-            0,
-            0,
-            0,
-            color.r,
-            color.g,
-            color.b,
-        ];
+            speed,
+            direction.protocol_value(),
+            color_mode,
+            palette_index,
+            color,
+        );
         self.send_set_data(
             SUBCMD_MAIN_LIGHT,
             MAIN_LIGHT_OFFSET,
@@ -85,6 +93,81 @@ impl<'a> KeyboardProtocol<'a> {
         .context("failed to send RGB brightness packet")?;
 
         self.apply().context("failed to send RGB apply packet")
+    }
+
+    pub fn set_side_light(
+        &self,
+        effect: RgbSideEffect,
+        color: RgbColor,
+        brightness: u8,
+        speed: u8,
+        color_mode: RgbColorMode,
+        palette_index: u8,
+    ) -> Result<()> {
+        let light_payload = build_side_light_payload(
+            effect.protocol_id(),
+            brightness,
+            speed,
+            color_mode,
+            palette_index,
+            color,
+        );
+        self.send_set_data(
+            SUBCMD_SIDE_LIGHT,
+            SIDE_LIGHT_OFFSET,
+            &light_payload,
+            SET_DATA_WINDOW_SIZE,
+        )
+        .context("failed to send side-light packet")?;
+
+        let brightness_payload = [brightness];
+        self.send_set_data(
+            SUBCMD_MAIN_BRIGHTNESS,
+            SIDE_LIGHT_OFFSET + 1,
+            &brightness_payload,
+            SET_DATA_WINDOW_SIZE,
+        )
+        .context("failed to send side-light brightness packet")?;
+
+        Ok(())
+    }
+
+    pub fn set_decorative_light(
+        &self,
+        effect: RgbSideEffect,
+        color: RgbColor,
+        brightness: u8,
+        speed: u8,
+        color_mode: RgbColorMode,
+        palette_index: u8,
+        base_offset: u16,
+    ) -> Result<()> {
+        let light_payload = build_side_light_payload(
+            effect.protocol_id(),
+            brightness,
+            speed,
+            color_mode,
+            palette_index,
+            color,
+        );
+        self.send_set_data(
+            SUBCMD_SIDE_LIGHT,
+            base_offset,
+            &light_payload,
+            SET_DATA_WINDOW_SIZE,
+        )
+        .context("failed to send decorative-light packet")?;
+
+        let brightness_payload = [brightness];
+        self.send_set_data(
+            SUBCMD_MAIN_BRIGHTNESS,
+            base_offset + 1,
+            &brightness_payload,
+            SET_DATA_WINDOW_SIZE,
+        )
+        .context("failed to send decorative-light brightness packet")?;
+
+        Ok(())
     }
 
     fn send_set_data(&self, subcommand: u8, offset: u16, payload: &[u8], size: u8) -> Result<()> {
@@ -111,6 +194,89 @@ impl<'a> KeyboardProtocol<'a> {
         validate_ack(&ack, CMD_APPLY)?;
         Ok(())
     }
+}
+
+impl RgbEffect {
+    const fn protocol_id(self) -> u8 {
+        match self {
+            Self::Ray => 1,
+            Self::Stair => 2,
+            Self::Static => 3,
+            Self::Breath => 4,
+            Self::Flower => 5,
+            Self::Wave => 6,
+            Self::Ripple => 7,
+            Self::Spout => 8,
+            Self::Galaxy => 9,
+            Self::Rotation => 10,
+            Self::Ripple2 => 11,
+            Self::Point => 12,
+            Self::Grid => 13,
+            Self::Time => 14,
+            Self::Rain => 15,
+            Self::Ribbon => 16,
+            Self::Gaming => 17,
+            Self::Identify => 18,
+            Self::Windmill => 19,
+            Self::Diagonal => 20,
+        }
+    }
+}
+
+impl RgbSideEffect {
+    const fn protocol_id(self) -> u8 {
+        match self {
+            Self::Time => 0,
+            Self::Neon => 1,
+            Self::Static => 2,
+            Self::Breathe => 3,
+            Self::Rhythm => 4,
+        }
+    }
+}
+
+impl RgbDirection {
+    const fn protocol_value(self) -> u8 {
+        match self {
+            Self::Left => 1,
+            Self::Right => 0,
+        }
+    }
+}
+
+fn build_main_light_payload(
+    effect_id: u8,
+    brightness: u8,
+    speed: u8,
+    direction: u8,
+    color_mode: RgbColorMode,
+    palette_index: u8,
+    color: RgbColor,
+) -> [u8; 9] {
+    let (mode_flag, palette) = match color_mode {
+        RgbColorMode::Custom => (0, 0),
+        RgbColorMode::Preset => (1, palette_index),
+    };
+    [
+        effect_id, brightness, speed, direction, mode_flag, palette, color.r, color.g, color.b,
+    ]
+}
+
+fn build_side_light_payload(
+    effect_id: u8,
+    brightness: u8,
+    speed: u8,
+    color_mode: RgbColorMode,
+    palette_index: u8,
+    color: RgbColor,
+) -> [u8; 8] {
+    let (mode_flag, palette) = match color_mode {
+        RgbColorMode::Custom => (0, 0),
+        RgbColorMode::Preset => (1, palette_index),
+    };
+    [
+        effect_id, brightness, speed, mode_flag, palette, color.r, color.g, color.b,
+    ]
 }
 
 fn negotiate_session_key(dev: &HidDevice, responder: &HidResponder) -> Result<SessionKey> {
