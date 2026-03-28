@@ -1,6 +1,6 @@
 # nuphyctl
 
-CLI for sending NuPhy keyboard HID commands.
+CLI for sending NuPhy keyboard HID commands (for keyboards supported by [drive.nuphy.io](https://drive.nuphy.io)).
 
 ## Build
 
