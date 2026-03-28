@@ -22,6 +22,21 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
+      - name: Validate tag version
+        run: |
+          expected_tag="v$(python3 - <<'PY'
+          import tomllib
+
+          with open('Cargo.toml', 'rb') as fh:
+              cargo = tomllib.load(fh)
+
+          print(cargo['package']['version'])
+          PY
+          )"
+          if [ "$expected_tag" != "${GITHUB_REF_NAME}" ]; then
+            echo "tag ${GITHUB_REF_NAME} does not match Cargo.toml version ${expected_tag}" >&2
+            exit 1
+          fi
       - uses: ./.github/actions/setup-rust
         with:
           components: rustfmt, clippy
@@ -89,10 +104,14 @@ jobs:
           fi
 
       - name: Package binary
-        run: tar -C target/${{ matrix.target }}/release -czf nuphyctl-${{ github.ref_name }}-${{ matrix.target }}.tar.gz nuphyctl
+        run: |
+          mkdir package
+          cp target/${{ matrix.target }}/release/nuphyctl package/
+          cp README.md LICENSE package/
+          tar -C package -czf nuphyctl-${{ github.ref_name }}-${{ matrix.target }}.tar.gz nuphyctl README.md LICENSE
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v8
         with:
           name: nuphyctl-${{ matrix.target }}
           path: nuphyctl-${{ github.ref_name }}-${{ matrix.target }}.tar.gz
@@ -105,8 +124,6 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v6
-
       - name: Download all artifacts
         uses: actions/download-artifact@v8
         with:
