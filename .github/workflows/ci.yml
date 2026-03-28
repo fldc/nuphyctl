@@ -38,6 +38,7 @@ jobs:
       - uses: ./.github/actions/setup-rust
         with:
           components: clippy
+          install-libudev: 'true'
       - name: Run Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
 
