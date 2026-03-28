@@ -1,0 +1,39 @@
+name: Setup Rust
+description: Install Rust toolchain, optional system dependencies, and cache build artifacts
+
+inputs:
+  components:
+    description: Comma-separated Rust components to install
+    required: false
+    default: ''
+  targets:
+    description: Comma-separated Rust targets to install
+    required: false
+    default: ''
+  install-libudev:
+    description: Install libudev development package
+    required: false
+    default: 'false'
+  cache-key:
+    description: Optional rust-cache key suffix
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Install system dependencies
+      if: inputs.install-libudev == 'true'
+      shell: bash
+      run: sudo apt-get update && sudo apt-get install -y libudev-dev
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: ${{ inputs.components }}
+        targets: ${{ inputs.targets }}
+
+    - name: Cache Rust artifacts
+      uses: Swatinem/rust-cache@v2
+      with:
+        key: ${{ inputs.cache-key }}

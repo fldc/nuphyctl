@@ -5,13 +5,39 @@ on:
     tags:
       - 'v*'
 
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
 
+permissions:
+  contents: read
+
 jobs:
+  verify:
+    name: Verify release commit
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-rust
+        with:
+          components: rustfmt, clippy
+          install-libudev: 'true'
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Run Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: Run tests
+        run: cargo test --all-features
+
   build-linux:
     name: Build Linux binaries
+    needs: verify
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     strategy:
       matrix:
         target:
@@ -20,19 +46,17 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - uses: ./.github/actions/setup-rust
         with:
+          install-libudev: 'true'
           targets: ${{ matrix.target }}
+          cache-key: ${{ matrix.target }}
 
       - name: Install cross-compilation tools
         if: matrix.target == 'aarch64-unknown-linux-gnu'
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu
-
-      - name: Install system dependencies
-        run: sudo apt-get install -y libudev-dev
 
       - name: Build binary
         env:
@@ -48,10 +72,7 @@ jobs:
           fi
 
       - name: Package binary
-        run: |
-          cd target/${{ matrix.target }}/release
-          tar czf ../../../nuphyctl-${{ github.ref_name }}-${{ matrix.target }}.tar.gz nuphyctl
-          cd -
+        run: tar -C target/${{ matrix.target }}/release -czf nuphyctl-${{ github.ref_name }}-${{ matrix.target }}.tar.gz nuphyctl
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
@@ -63,6 +84,7 @@ jobs:
     name: Create Release
     needs: build-linux
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
