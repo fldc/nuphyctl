@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 concurrency:
   group: release-${{ github.workflow }}-${{ github.ref }}
@@ -22,6 +23,21 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
+      - name: Validate tag version
+        run: |
+          expected_tag="v$(python3 - <<'PY'
+          import tomllib
+
+          with open('Cargo.toml', 'rb') as fh:
+              cargo = tomllib.load(fh)
+
+          print(cargo['package']['version'])
+          PY
+          )"
+          if [ "$expected_tag" != "${GITHUB_REF_NAME}" ]; then
+            echo "tag ${GITHUB_REF_NAME} does not match Cargo.toml version ${expected_tag}" >&2
+            exit 1
+          fi
       - uses: ./.github/actions/setup-rust
         with:
           components: rustfmt, clippy
@@ -34,34 +50,51 @@ jobs:
         run: cargo test --all-features
 
   build-linux:
-    name: Build Linux binaries
+    name: Build ${{ matrix.name }}
     needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 25
     strategy:
       matrix:
-        target:
-          - x86_64-unknown-linux-gnu
-          - aarch64-unknown-linux-gnu
+        include:
+          - target: x86_64-unknown-linux-gnu
+            name: linux-x86_64
+            cross: false
+          - target: aarch64-unknown-linux-gnu
+            name: linux-aarch64
+            cross: true
     steps:
       - uses: actions/checkout@v6
 
       - uses: ./.github/actions/setup-rust
         with:
-          install-libudev: 'true'
           targets: ${{ matrix.target }}
           cache-key: ${{ matrix.target }}
+          cache-targets: ${{ matrix.cross && 'false' || 'true' }}
 
-      - name: Install cross-compilation tools
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
+      - name: Install cross
+        if: matrix.cross
+        run: cargo install cross --locked
+
+      - name: Install native build dependencies
+        if: ${{ !matrix.cross }}
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
+          sudo apt-get install -y libudev-dev libhidapi-dev
 
-      - name: Build binary
-        env:
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
-        run: cargo build --release --target ${{ matrix.target }}
+      - name: Install strip tool
+        if: matrix.cross
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y binutils-aarch64-linux-gnu
+
+      - name: Build (native)
+        if: ${{ !matrix.cross }}
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Build (cross)
+        if: matrix.cross
+        run: cross build --release --locked --target ${{ matrix.target }}
 
       - name: Strip binary
         run: |
@@ -72,13 +105,17 @@ jobs:
           fi
 
       - name: Package binary
-        run: tar -C target/${{ matrix.target }}/release -czf nuphyctl-${{ github.ref_name }}-${{ matrix.target }}.tar.gz nuphyctl
+        run: |
+          mkdir package
+          cp target/${{ matrix.target }}/release/nuphyctl package/
+          cp README.md LICENSE package/
+          tar -C package -czf nuphyctl-${{ github.ref_name }}-${{ matrix.name }}.tar.gz nuphyctl README.md LICENSE
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: nuphyctl-${{ matrix.target }}
-          path: nuphyctl-${{ github.ref_name }}-${{ matrix.target }}.tar.gz
+          name: nuphyctl-${{ matrix.name }}
+          path: nuphyctl-${{ github.ref_name }}-${{ matrix.name }}.tar.gz
 
   create-release:
     name: Create Release
@@ -88,8 +125,6 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v6
-
       - name: Download all artifacts
         uses: actions/download-artifact@v8
         with:
