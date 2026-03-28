@@ -111,7 +111,7 @@ jobs:
           tar -C package -czf nuphyctl-${{ github.ref_name }}-${{ matrix.name }}.tar.gz nuphyctl README.md LICENSE
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v8
+        uses: actions/upload-artifact@v6
         with:
           name: nuphyctl-${{ matrix.name }}
           path: nuphyctl-${{ github.ref_name }}-${{ matrix.name }}.tar.gz
