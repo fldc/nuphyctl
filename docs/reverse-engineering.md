@@ -1,10 +1,10 @@
 # NuPhy HID Reverse Engineering
 
-This document captures the current protocol understanding and the repeatable process used to discover/validate it.
+This document captures the current protocol understanding behind `nuphyctl` and the repeatable workflow used to discover and validate new behavior.
 
 ## Scope
 
-Use this workflow when adding controls like effect mode, speed, per-key behavior, or additional lighting parameters.
+Use this workflow when adding controls like effect mode, speed, palette selection, per-key behavior, or other lighting parameters.
 
 ## Current protocol notes (implemented)
 
@@ -19,12 +19,14 @@ RGB flow used by this CLI:
 
 1. Main light: `SET_DATA` (`0xd6`) subcommand `0x09` offset `0` payload `[effect, brightness, speed, direction, mode_flag, palette, r, g, b]`
 2. Side light: `SET_DATA` (`0xd6`) subcommand `0x08` offset `9` payload `[effect, brightness, speed, mode_flag, palette, r, g, b]`
-3. Brightness mirror writes use subcommand `0x01` at offsets `1` (main) and `10` (side)
+3. Decorative light currently reuses the side-light payload format with a model-dependent base offset
+4. Brightness mirror writes use subcommand `0x01` at offsets `1` (main) and `10` (side)
 
 Current CLI behavior:
 
 - Main light uses legacy explicit apply (`0xd5`) for compatibility.
 - Side and decorative writes currently skip explicit apply (matches observed GUI behavior in current web app traces).
+- Write paths in `nuphyctl` retry a small set of transient HID failures before surfacing an error.
 
 Main-light effect mapping captured from NuPhy Drive (Air75 V3, Lighting Effects list order):
 
@@ -68,6 +70,12 @@ Decorative/strip/front-light notes:
 
 - Device families differ; the GUI bundle exposes both 2-channel and 3-channel layouts.
 - Third channel offsets are model-dependent; `17` and `35` are known candidates from traces/bundle analysis.
+
+Device targeting notes:
+
+- `nuphyctl list` prints `path`, `vid`, `pid`, `iface`, `usage_page`, and `usage` so captures can be reproduced against the same HID interface.
+- If no selector is passed, the CLI tries to auto-pick the most likely control interface.
+- When multiple candidates remain, prefer `--path` for exact reproduction during packet experiments.
 
 ## 1) Capture packets in Chrome
 
@@ -171,9 +179,10 @@ Look for:
 2. Expose new input parameters in `src/cli.rs`.
 3. Wire command flow in `src/app.rs`.
 4. Reuse transport primitives in `src/hid_transport.rs`.
-5. Validate with `cargo run -- raw send ...` before exposing new flags broadly.
+5. Validate with `cargo run -- raw send ...` or a narrow `cargo run -- rgb ... --path /dev/hidrawX` command before exposing new flags broadly.
 
 ## Practical notes
 
 - Close NuPhy web app before running CLI writes; concurrent HID access can cause transient errors.
 - Keep mode/color fixed when testing one variable to avoid noisy packet diffs.
+- Prefer exact device selectors during reverse engineering so results are repeatable across reconnects and multiple interfaces.

@@ -1,6 +1,15 @@
 # nuphyctl
 
-CLI for sending NuPhy keyboard HID commands (for keyboards supported by [drive.nuphy.io](https://drive.nuphy.io)).
+`nuphyctl` is a Rust CLI for sending NuPhy keyboard HID commands to boards supported by [drive.nuphy.io](https://drive.nuphy.io).
+
+It currently supports:
+
+- listing visible HID devices
+- printing supported command paths
+- setting main/backlight RGB effects
+- setting side-light effects
+- setting decorative/strip-light effects
+- sending raw 64-byte HID reports for reverse engineering
 
 ## Build
 
@@ -8,90 +17,148 @@ CLI for sending NuPhy keyboard HID commands (for keyboards supported by [drive.n
 cargo build
 ```
 
-## Usage
+Run directly from the repo during development:
 
-List HID devices:
+```bash
+cargo run -- --help
+```
+
+Or install it locally:
+
+```bash
+cargo install --path .
+```
+
+## Commands
+
+List HID devices visible to `hidapi`:
 
 ```bash
 cargo run -- list
 ```
 
-List all available command paths:
+Print all supported command paths:
 
 ```bash
 cargo run -- commands
 ```
 
-Set RGB effect and color (`#RRGGBB`):
+Show help for a subcommand:
+
+```bash
+cargo run -- rgb set --help
+```
+
+## Lighting examples
+
+Set a static backlight color (`#RRGGBB` or `RRGGBB`):
 
 ```bash
 cargo run -- rgb set --hex ff0000
 ```
 
-Backlight supports speed, direction, and color source:
-
-```bash
-cargo run -- rgb set --effect wave --hex 00aaff --speed 3 --direction left --color-mode custom
-```
-
-Select a specific lighting effect from NuPhy Drive:
-
-```bash
-cargo run -- rgb set --effect wave --hex 00aaff
-```
-
-Available effects: `ray`, `stair`, `static`, `breath`, `flower`, `wave`, `ripple`, `spout`, `galaxy`, `rotation`, `ripple2`, `point`, `grid`, `time`, `rain`, `ribbon`, `gaming`, `identify`, `windmill`, `diagonal`.
-
-Set side-light effect:
-
-```bash
-cargo run -- rgb side --effect neon --hex ffffff --brightness 70 --speed 2
-```
-
-Side-light effects: `time`, `neon`, `static`, `breathe`, `rhythm`.
-
-Set decorative/strip light effect (experimental, model-dependent offsets):
-
-```bash
-cargo run -- rgb decorative --effect static --hex ff8800 --base-offset 17
-```
-
-If your model uses a different decorative channel offset, override `--base-offset` (common values observed: `17` for some 2-channel layouts, `35` for 3-channel layouts).
-
-Set static color with brightness (`0-100`):
+Set backlight brightness (`0-100`):
 
 ```bash
 cargo run -- rgb set --hex ff0000 --brightness 35
 ```
 
-If multiple HID devices are present, target one explicitly:
+Set an animated backlight effect with speed and direction:
+
+```bash
+cargo run -- rgb set --effect wave --hex 00aaff --speed 3 --direction left
+```
+
+Use a preset palette instead of a custom RGB color:
+
+```bash
+cargo run -- rgb set --effect wave --hex 000000 --color-mode preset --palette-index 2
+```
+
+Set a side-light effect with a custom color:
+
+```bash
+cargo run -- rgb side --effect static --hex ffffff --brightness 70 --speed 2
+```
+
+For side-light effects that do not use custom color, `--hex` is optional:
+
+```bash
+cargo run -- rgb side --effect neon --brightness 70 --speed 2
+```
+
+Set a decorative/strip-light effect (experimental, model-dependent offsets):
+
+```bash
+cargo run -- rgb decorative --effect static --hex ff8800 --base-offset 17
+```
+
+If your model uses a different decorative channel offset, override `--base-offset`.
+Observed values so far include `17` for some 2-channel layouts and `35` for some 3-channel layouts.
+
+## Effects
+
+Main/backlight effects:
+
+`ray`, `stair`, `static`, `breath`, `flower`, `wave`, `ripple`, `spout`, `galaxy`, `rotation`, `ripple2`, `point`, `grid`, `time`, `rain`, `ribbon`, `gaming`, `identify`, `windmill`, `diagonal`
+
+Side/decorative effects:
+
+`time`, `neon`, `static`, `breathe`, `rhythm`
+
+## Device selection
+
+If more than one matching HID interface is present, narrow the target with one or more selector flags.
+
+Target a specific vendor/product pair:
 
 ```bash
 cargo run -- rgb set --hex 00ff00 --vid 0x19f5 --pid 0x1028
 ```
 
-When no `--vid/--pid` is provided, `nuphyctl` defaults to Air75 V3 (`0x19f5:0x1028`).
-
-For composite devices with several interfaces (common on keyboards), select by hidraw path:
+Target a specific `hidraw` path:
 
 ```bash
 cargo run -- rgb set --hex 00ff00 --path /dev/hidraw5
 ```
 
-You can also narrow by interface or usage fields from `list` output:
+Narrow by interface and usage fields from `list` output:
 
 ```bash
 cargo run -- rgb set --hex 00ff00 --vid 0x19f5 --pid 0x1028 --iface 3 --usage-page 0x0001 --usage 0x0000
 ```
 
-Send a raw 64-byte packet:
+Available selectors:
+
+- `--vid`
+- `--pid`
+- `--path`
+- `--iface`
+- `--usage-page`
+- `--usage`
+
+If you do not pass a selector, `nuphyctl` tries to choose the most likely keyboard control interface automatically.
+
+## Raw reports
+
+Send a raw 64-byte HID packet:
 
 ```bash
 cargo run -- raw send --hex "55d60093656564650000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
 ```
 
+You can also override the HID report ID when needed:
+
+```bash
+cargo run -- raw send --report-id 0 --hex "...128 hex chars..."
+```
+
+## Notes
+
+- `rgb set`, `rgb side`, and `rgb decorative` automatically retry a few common transient HID failures
+- `rgb side` and `rgb decorative` require `--hex` only for effects that use custom RGB color
+- `raw send` expects exactly 64 payload bytes
+
 ## Reverse engineering
 
-Detailed protocol notes and DevTools workflow are in:
-
-- [docs/reverse-engineering.md](docs/reverse-engineering.md)
+Detailed protocol notes and the DevTools capture workflow live in `docs/reverse-engineering.md`.
