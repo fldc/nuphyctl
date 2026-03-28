@@ -1,13 +1,13 @@
 use crate::cli::{
-    Cli, Command, DeviceSelector, RawSubcommand, RgbColorMode, RgbDirection, RgbEffect,
-    RgbSideEffect, RgbSubcommand,
+    Cli, Command, DeviceSelector, RawSubcommand, RgbColorMode, RgbDecorativeSetArgs, RgbDirection,
+    RgbEffect, RgbSetArgs, RgbSideEffect, RgbSideSetArgs, RgbSubcommand,
 };
-use crate::color::{parse_hex_bytes, RgbColor};
+use crate::color::{RgbColor, parse_hex_bytes};
 use crate::hid_transport::{
-    clear_input_reports, list_devices, open_selected_device, send_report, REPORT_LEN,
+    REPORT_LEN, clear_input_reports, list_devices, open_selected_device, send_report,
 };
-use crate::nuphy_protocol::{KeyboardProtocol, SessionKey};
-use anyhow::{bail, Result};
+use crate::nuphy_protocol::{KeyboardProtocol, MainLightSettings, SessionKey, SideLightSettings};
+use anyhow::{Result, bail};
 use hidapi::HidApi;
 use std::{thread, time::Duration};
 
@@ -23,6 +23,27 @@ const RETRYABLE_RGB_ERROR_PATTERNS: [&str; 6] = [
     "short write",
 ];
 
+#[derive(Clone, Copy)]
+struct MainLightCommand {
+    effect: RgbEffect,
+    color: RgbColor,
+    brightness: u8,
+    speed: u8,
+    direction: RgbDirection,
+    color_mode: RgbColorMode,
+    palette_index: u8,
+}
+
+#[derive(Clone, Copy)]
+struct SideLightCommand {
+    effect: RgbSideEffect,
+    color: RgbColor,
+    brightness: u8,
+    speed: u8,
+    color_mode: RgbColorMode,
+    palette_index: u8,
+}
+
 pub fn run(cli: Cli, api: &HidApi) -> Result<()> {
     match cli.command {
         Command::Commands => {
@@ -34,38 +55,9 @@ pub fn run(cli: Cli, api: &HidApi) -> Result<()> {
             Ok(())
         }
         Command::Rgb(rgb) => match rgb.action {
-            RgbSubcommand::Set(args) => run_rgb_set(
-                api,
-                &args.device,
-                args.effect,
-                &args.hex,
-                args.brightness,
-                args.speed,
-                args.direction,
-                args.color_mode,
-                args.palette_index,
-            ),
-            RgbSubcommand::Side(args) => run_rgb_side(
-                api,
-                &args.device,
-                args.effect,
-                args.hex.as_deref(),
-                args.brightness,
-                args.speed,
-                args.color_mode,
-                args.palette_index,
-            ),
-            RgbSubcommand::Decorative(args) => run_rgb_decorative(
-                api,
-                &args.device,
-                args.effect,
-                args.hex.as_deref(),
-                args.brightness,
-                args.speed,
-                args.color_mode,
-                args.palette_index,
-                args.base_offset,
-            ),
+            RgbSubcommand::Set(args) => run_rgb_set(api, &args),
+            RgbSubcommand::Side(args) => run_rgb_side(api, &args),
+            RgbSubcommand::Decorative(args) => run_rgb_decorative(api, &args),
         },
         Command::Raw(raw) => match raw.action {
             RawSubcommand::Send(args) => run_raw_send(api, &args.device, args.report_id, &args.hex),
@@ -73,54 +65,43 @@ pub fn run(cli: Cli, api: &HidApi) -> Result<()> {
     }
 }
 
-fn run_rgb_set(
-    api: &HidApi,
-    selector: &DeviceSelector,
-    effect: RgbEffect,
-    color_hex: &str,
-    brightness: u8,
-    speed: u8,
-    direction: RgbDirection,
-    color_mode: RgbColorMode,
-    palette_index: u8,
-) -> Result<()> {
-    let (color, normalized_hex) = RgbColor::from_hex(color_hex)?;
+fn run_rgb_set(api: &HidApi, args: &RgbSetArgs) -> Result<()> {
+    let (color, normalized_hex) = RgbColor::from_hex(&args.hex)?;
+    let command = MainLightCommand {
+        effect: args.effect,
+        color,
+        brightness: args.brightness,
+        speed: args.speed,
+        direction: args.direction,
+        color_mode: args.color_mode,
+        palette_index: args.palette_index,
+    };
 
     for attempt in 1..=RGB_SET_MAX_ATTEMPTS {
-        match run_rgb_set_once(
-            api,
-            selector,
-            effect,
-            color,
-            brightness,
-            speed,
-            direction,
-            color_mode,
-            palette_index,
-        ) {
+        match run_rgb_set_once(api, &args.device, command) {
             Ok(session_key) => {
                 if attempt == 1 {
                     println!(
                         "sent backlight {} effect color={} brightness={} speed={} direction={} mode={} palette={} key=0x{:02x}",
-                        effect.display_name(),
+                        args.effect.display_name(),
                         normalized_hex,
-                        brightness,
-                        speed,
-                        direction.display_name(),
-                        color_mode.display_name(),
-                        palette_index,
+                        args.brightness,
+                        args.speed,
+                        args.direction.display_name(),
+                        args.color_mode.display_name(),
+                        args.palette_index,
                         session_key.value(),
                     );
                 } else {
                     println!(
                         "sent backlight {} effect color={} brightness={} speed={} direction={} mode={} palette={} key=0x{:02x} after retry {}",
-                        effect.display_name(),
+                        args.effect.display_name(),
                         normalized_hex,
-                        brightness,
-                        speed,
-                        direction.display_name(),
-                        color_mode.display_name(),
-                        palette_index,
+                        args.brightness,
+                        args.speed,
+                        args.direction.display_name(),
+                        args.color_mode.display_name(),
+                        args.palette_index,
                         session_key.value(),
                         attempt,
                     );
@@ -149,75 +130,59 @@ fn run_rgb_set(
 fn run_rgb_set_once(
     api: &HidApi,
     selector: &DeviceSelector,
-    effect: RgbEffect,
-    color: RgbColor,
-    brightness: u8,
-    speed: u8,
-    direction: RgbDirection,
-    color_mode: RgbColorMode,
-    palette_index: u8,
+    command: MainLightCommand,
 ) -> Result<SessionKey> {
     let dev = open_selected_device(api, selector)?;
     clear_input_reports(&dev)?;
 
     let protocol = KeyboardProtocol::new(&dev)?;
-    protocol.set_main_light(
-        effect,
-        color,
-        brightness,
-        speed,
-        direction,
-        color_mode,
-        palette_index,
-    )?;
+    protocol.set_main_light(MainLightSettings {
+        effect: command.effect,
+        color: command.color,
+        brightness: command.brightness,
+        speed: command.speed,
+        direction: command.direction,
+        color_mode: command.color_mode,
+        palette_index: command.palette_index,
+    })?;
 
     Ok(protocol.session_key())
 }
 
-fn run_rgb_side(
-    api: &HidApi,
-    selector: &DeviceSelector,
-    effect: RgbSideEffect,
-    color_hex: Option<&str>,
-    brightness: u8,
-    speed: u8,
-    color_mode: RgbColorMode,
-    palette_index: u8,
-) -> Result<()> {
-    let (color, normalized_hex) = parse_effect_color(effect, color_hex)?;
+fn run_rgb_side(api: &HidApi, args: &RgbSideSetArgs) -> Result<()> {
+    let (color, normalized_hex) = parse_effect_color(args.effect, args.hex.as_deref())?;
+    let command = SideLightCommand {
+        effect: args.effect,
+        color,
+        brightness: args.brightness,
+        speed: args.speed,
+        color_mode: args.color_mode,
+        palette_index: args.palette_index,
+    };
 
     for attempt in 1..=RGB_SET_MAX_ATTEMPTS {
-        match run_rgb_side_once(
-            api,
-            selector,
-            effect,
-            color,
-            brightness,
-            speed,
-            color_mode,
-            palette_index,
-        ) {
+        match run_rgb_side_once(api, &args.device, command) {
             Ok(session_key) => {
                 if attempt == 1 {
                     println!(
                         "sent side-light {} effect color={} brightness={} speed={} mode={} palette={} key=0x{:02x}",
-                        effect.display_name(),
+                        args.effect.display_name(),
                         normalized_hex,
-                        brightness,
-                        speed,
-                        color_mode.display_name(),
-                        palette_index,
+                        args.brightness,
+                        args.speed,
+                        args.color_mode.display_name(),
+                        args.palette_index,
                         session_key.value(),
                     );
                 } else {
                     println!(
                         "sent side-light {} effect color={} brightness={} speed={} mode={} palette={} key=0x{:02x} after retry {}",
-                        effect.display_name(),
+                        args.effect.display_name(),
                         normalized_hex,
-                        brightness,
-                        speed,
-                        color_mode.display_name(),
-                        palette_index,
+                        args.brightness,
+                        args.speed,
+                        args.color_mode.display_name(),
+                        args.palette_index,
                         session_key.value(),
                         attempt,
                     );
@@ -246,71 +211,60 @@ fn run_rgb_side(
 fn run_rgb_side_once(
     api: &HidApi,
     selector: &DeviceSelector,
-    effect: RgbSideEffect,
-    color: RgbColor,
-    brightness: u8,
-    speed: u8,
-    color_mode: RgbColorMode,
-    palette_index: u8,
+    command: SideLightCommand,
 ) -> Result<SessionKey> {
     let dev = open_selected_device(api, selector)?;
     clear_input_reports(&dev)?;
 
     let protocol = KeyboardProtocol::new(&dev)?;
-    protocol.set_side_light(effect, color, brightness, speed, color_mode, palette_index)?;
+    protocol.set_side_light(SideLightSettings {
+        effect: command.effect,
+        color: command.color,
+        brightness: command.brightness,
+        speed: command.speed,
+        color_mode: command.color_mode,
+        palette_index: command.palette_index,
+    })?;
 
     Ok(protocol.session_key())
 }
 
-#[allow(clippy::too_many_arguments)]
-fn run_rgb_decorative(
-    api: &HidApi,
-    selector: &DeviceSelector,
-    effect: RgbSideEffect,
-    color_hex: Option<&str>,
-    brightness: u8,
-    speed: u8,
-    color_mode: RgbColorMode,
-    palette_index: u8,
-    base_offset: u16,
-) -> Result<()> {
-    let (color, normalized_hex) = parse_effect_color(effect, color_hex)?;
+fn run_rgb_decorative(api: &HidApi, args: &RgbDecorativeSetArgs) -> Result<()> {
+    let (color, normalized_hex) = parse_effect_color(args.effect, args.hex.as_deref())?;
+    let command = SideLightCommand {
+        effect: args.effect,
+        color,
+        brightness: args.brightness,
+        speed: args.speed,
+        color_mode: args.color_mode,
+        palette_index: args.palette_index,
+    };
 
     for attempt in 1..=RGB_SET_MAX_ATTEMPTS {
-        match run_rgb_decorative_once(
-            api,
-            selector,
-            effect,
-            color,
-            brightness,
-            speed,
-            color_mode,
-            palette_index,
-            base_offset,
-        ) {
+        match run_rgb_decorative_once(api, &args.device, command, args.base_offset) {
             Ok(session_key) => {
                 if attempt == 1 {
                     println!(
                         "sent decorative-light {} effect color={} brightness={} speed={} mode={} palette={} base_offset={} key=0x{:02x}",
-                        effect.display_name(),
+                        args.effect.display_name(),
                         normalized_hex,
-                        brightness,
-                        speed,
-                        color_mode.display_name(),
-                        palette_index,
-                        base_offset,
+                        args.brightness,
+                        args.speed,
+                        args.color_mode.display_name(),
+                        args.palette_index,
+                        args.base_offset,
                         session_key.value(),
                     );
                 } else {
                     println!(
                         "sent decorative-light {} effect color={} brightness={} speed={} mode={} palette={} base_offset={} key=0x{:02x} after retry {}",
-                        effect.display_name(),
+                        args.effect.display_name(),
                         normalized_hex,
-                        brightness,
-                        speed,
-                        color_mode.display_name(),
-                        palette_index,
-                        base_offset,
+                        args.brightness,
+                        args.speed,
+                        args.color_mode.display_name(),
+                        args.palette_index,
+                        args.base_offset,
                         session_key.value(),
                         attempt,
                     );
@@ -336,16 +290,10 @@ fn run_rgb_decorative(
     bail!("unexpected decorative-light retry loop exit")
 }
 
-#[allow(clippy::too_many_arguments)]
 fn run_rgb_decorative_once(
     api: &HidApi,
     selector: &DeviceSelector,
-    effect: RgbSideEffect,
-    color: RgbColor,
-    brightness: u8,
-    speed: u8,
-    color_mode: RgbColorMode,
-    palette_index: u8,
+    command: SideLightCommand,
     base_offset: u16,
 ) -> Result<SessionKey> {
     let dev = open_selected_device(api, selector)?;
@@ -353,12 +301,14 @@ fn run_rgb_decorative_once(
 
     let protocol = KeyboardProtocol::new(&dev)?;
     protocol.set_decorative_light(
-        effect,
-        color,
-        brightness,
-        speed,
-        color_mode,
-        palette_index,
+        SideLightSettings {
+            effect: command.effect,
+            color: command.color,
+            brightness: command.brightness,
+            speed: command.speed,
+            color_mode: command.color_mode,
+            palette_index: command.palette_index,
+        },
         base_offset,
     )?;
 

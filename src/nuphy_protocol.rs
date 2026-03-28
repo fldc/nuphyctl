@@ -1,7 +1,7 @@
 use crate::cli::{RgbColorMode, RgbDirection, RgbEffect, RgbSideEffect};
 use crate::color::RgbColor;
-use crate::hid_transport::{HidResponder, Report, REPORT_LEN};
-use anyhow::{bail, Context, Result};
+use crate::hid_transport::{HidResponder, REPORT_LEN, Report};
+use anyhow::{Context, Result, bail};
 use hidapi::HidDevice;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -23,6 +23,27 @@ const MAIN_BRIGHTNESS_OFFSET: u16 = 1;
 const SET_DATA_WINDOW_SIZE: u8 = 1;
 
 type KeyExchangePayload = [u8; KEY_EXCHANGE_PAYLOAD_LEN];
+
+#[derive(Clone, Copy, Debug)]
+pub struct MainLightSettings {
+    pub effect: RgbEffect,
+    pub color: RgbColor,
+    pub brightness: u8,
+    pub speed: u8,
+    pub direction: RgbDirection,
+    pub color_mode: RgbColorMode,
+    pub palette_index: u8,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct SideLightSettings {
+    pub effect: RgbSideEffect,
+    pub color: RgbColor,
+    pub brightness: u8,
+    pub speed: u8,
+    pub color_mode: RgbColorMode,
+    pub palette_index: u8,
+}
 
 #[derive(Clone, Copy, Debug)]
 pub struct SessionKey(u8);
@@ -55,25 +76,16 @@ impl<'a> KeyboardProtocol<'a> {
         self.session_key
     }
 
-    pub fn set_main_light(
-        &self,
-        effect: RgbEffect,
-        color: RgbColor,
-        brightness: u8,
-        speed: u8,
-        direction: RgbDirection,
-        color_mode: RgbColorMode,
-        palette_index: u8,
-    ) -> Result<()> {
-        let effect_id = effect.protocol_id();
+    pub fn set_main_light(&self, settings: MainLightSettings) -> Result<()> {
+        let effect_id = settings.effect.protocol_id();
         let light_payload = build_main_light_payload(
             effect_id,
-            brightness,
-            speed,
-            direction.protocol_value(),
-            color_mode,
-            palette_index,
-            color,
+            settings.brightness,
+            settings.speed,
+            settings.direction.protocol_value(),
+            settings.color_mode,
+            settings.palette_index,
+            settings.color,
         );
         self.send_set_data(
             SUBCMD_MAIN_LIGHT,
@@ -83,7 +95,7 @@ impl<'a> KeyboardProtocol<'a> {
         )
         .context("failed to send RGB main-light packet")?;
 
-        let brightness_payload = [brightness];
+        let brightness_payload = [settings.brightness];
         self.send_set_data(
             SUBCMD_MAIN_BRIGHTNESS,
             MAIN_BRIGHTNESS_OFFSET,
@@ -95,22 +107,14 @@ impl<'a> KeyboardProtocol<'a> {
         self.apply().context("failed to send RGB apply packet")
     }
 
-    pub fn set_side_light(
-        &self,
-        effect: RgbSideEffect,
-        color: RgbColor,
-        brightness: u8,
-        speed: u8,
-        color_mode: RgbColorMode,
-        palette_index: u8,
-    ) -> Result<()> {
+    pub fn set_side_light(&self, settings: SideLightSettings) -> Result<()> {
         let light_payload = build_side_light_payload(
-            effect.protocol_id(),
-            brightness,
-            speed,
-            color_mode,
-            palette_index,
-            color,
+            settings.effect.protocol_id(),
+            settings.brightness,
+            settings.speed,
+            settings.color_mode,
+            settings.palette_index,
+            settings.color,
         );
         self.send_set_data(
             SUBCMD_SIDE_LIGHT,
@@ -120,7 +124,7 @@ impl<'a> KeyboardProtocol<'a> {
         )
         .context("failed to send side-light packet")?;
 
-        let brightness_payload = [brightness];
+        let brightness_payload = [settings.brightness];
         self.send_set_data(
             SUBCMD_MAIN_BRIGHTNESS,
             SIDE_LIGHT_OFFSET + 1,
@@ -134,21 +138,16 @@ impl<'a> KeyboardProtocol<'a> {
 
     pub fn set_decorative_light(
         &self,
-        effect: RgbSideEffect,
-        color: RgbColor,
-        brightness: u8,
-        speed: u8,
-        color_mode: RgbColorMode,
-        palette_index: u8,
+        settings: SideLightSettings,
         base_offset: u16,
     ) -> Result<()> {
         let light_payload = build_side_light_payload(
-            effect.protocol_id(),
-            brightness,
-            speed,
-            color_mode,
-            palette_index,
-            color,
+            settings.effect.protocol_id(),
+            settings.brightness,
+            settings.speed,
+            settings.color_mode,
+            settings.palette_index,
+            settings.color,
         );
         self.send_set_data(
             SUBCMD_SIDE_LIGHT,
@@ -158,7 +157,7 @@ impl<'a> KeyboardProtocol<'a> {
         )
         .context("failed to send decorative-light packet")?;
 
-        let brightness_payload = [brightness];
+        let brightness_payload = [settings.brightness];
         self.send_set_data(
             SUBCMD_MAIN_BRIGHTNESS,
             base_offset + 1,

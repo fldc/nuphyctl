@@ -1,4 +1,4 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 
 #[derive(Clone, Copy, Debug)]
 pub struct RgbColor {
@@ -36,7 +36,7 @@ pub fn parse_hex_bytes(input: &str) -> Result<Vec<u8>> {
     if compact.is_empty() {
         bail!("empty hex string");
     }
-    if compact.len() % 2 != 0 {
+    if !compact.len().is_multiple_of(2) {
         bail!("hex string has odd length");
     }
     if !compact.chars().all(|c| c.is_ascii_hexdigit()) {

@@ -1,5 +1,5 @@
 use crate::cli::DeviceSelector;
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use hidapi::{DeviceInfo, HidApi, HidDevice};
 use std::collections::BTreeSet;
 use std::time::{Duration, Instant};
@@ -249,10 +249,10 @@ fn wait_for_response(dev: &HidDevice, expected_cmd: u8, timeout: Duration) -> Re
 
         let remaining = timeout - elapsed;
         let step = remaining.min(Duration::from_millis(80));
-        if let Some(report) = read_input_report(dev, step)? {
-            if report[1] == expected_cmd {
-                return Ok(report);
-            }
+        if let Some(report) = read_input_report(dev, step)?
+            && report[1] == expected_cmd
+        {
+            return Ok(report);
         }
     }
 }
