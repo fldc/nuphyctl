@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 concurrency:
   group: release-${{ github.workflow }}-${{ github.ref }}
@@ -58,44 +59,41 @@ jobs:
         include:
           - target: x86_64-unknown-linux-gnu
             name: linux-x86_64
+            cross: false
           - target: aarch64-unknown-linux-gnu
             name: linux-aarch64
+            cross: true
     steps:
       - uses: actions/checkout@v6
 
       - uses: ./.github/actions/setup-rust
         with:
-          install-libudev: 'true'
           targets: ${{ matrix.target }}
           cache-key: ${{ matrix.target }}
 
-      - name: Install cross-compilation tools
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
+      - name: Install cross
+        if: matrix.cross
+        run: cargo install cross --git https://github.com/cross-rs/cross --locked
+
+      - name: Install native build dependencies
+        if: ${{ !matrix.cross }}
         run: |
-          sudo dpkg --add-architecture arm64
-          sudo python3 - <<'PY'
-          from pathlib import Path
-
-          path = Path('/etc/apt/sources.list.d/ubuntu.sources')
-          text = path.read_text()
-          lines = []
-          for line in text.splitlines():
-              lines.append(line)
-              if line.startswith('Suites:'):
-                  lines.append('Architectures: amd64')
-          path.write_text('\n'.join(lines) + '\n')
-          PY
-          sudo bash -c 'echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports noble main restricted universe multiverse" > /etc/apt/sources.list.d/arm64.list'
-          sudo bash -c 'echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports noble-updates main restricted universe multiverse" >> /etc/apt/sources.list.d/arm64.list'
-          sudo bash -c 'echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports noble-security main restricted universe multiverse" >> /etc/apt/sources.list.d/arm64.list'
           sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu libudev-dev:arm64
+          sudo apt-get install -y libudev-dev libhidapi-dev
 
-      - name: Build binary
-        env:
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
-          PKG_CONFIG_SYSROOT_DIR: /usr/aarch64-linux-gnu
-        run: cargo build --release --target ${{ matrix.target }}
+      - name: Install strip tool
+        if: matrix.cross
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y binutils-aarch64-linux-gnu
+
+      - name: Build (native)
+        if: ${{ !matrix.cross }}
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Build (cross)
+        if: matrix.cross
+        run: cross build --release --locked --target ${{ matrix.target }}
 
       - name: Strip binary
         run: |
