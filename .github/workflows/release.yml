@@ -31,6 +31,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu
 
+      - name: Install system dependencies
+        run: sudo apt-get install -y libudev-dev
+
       - name: Build binary
         env:
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
