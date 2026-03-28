@@ -2,6 +2,10 @@
 name = "nuphyctl"
 version = "0.5.0"
 edition = "2024"
+description = "CLI for sending NuPhy keyboard HID commands"
+license = "MIT"
+repository = "https://github.com/fldc/nuphyctl"
+readme = "README.md"
 
 [dependencies]
 anyhow = "1.0.102"
