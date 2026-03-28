@@ -56,6 +56,10 @@ jobs:
         if: matrix.target == 'aarch64-unknown-linux-gnu'
         run: |
           sudo dpkg --add-architecture arm64
+          sudo bash -c 'echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports noble main restricted universe multiverse" > /etc/apt/sources.list.d/arm64.list'
+          sudo bash -c 'echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports noble-updates main restricted universe multiverse" >> /etc/apt/sources.list.d/arm64.list'
+          sudo bash -c 'echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports noble-security main restricted universe multiverse" >> /etc/apt/sources.list.d/arm64.list'
+          sudo sed -i 's/^deb http/deb [arch=amd64] http/' /etc/apt/sources.list
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu libudev-dev:arm64
 
