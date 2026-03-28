@@ -70,10 +70,11 @@ jobs:
         with:
           targets: ${{ matrix.target }}
           cache-key: ${{ matrix.target }}
+          cache-targets: ${{ matrix.cross && 'false' || 'true' }}
 
       - name: Install cross
         if: matrix.cross
-        run: cargo install cross --git https://github.com/cross-rs/cross --locked
+        run: cargo install cross --locked
 
       - name: Install native build dependencies
         if: ${{ !matrix.cross }}
