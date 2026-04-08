@@ -161,4 +161,4 @@ cargo run -- raw send --report-id 0 --hex "...128 hex chars..."
 
 ## Reverse engineering
 
-Detailed protocol notes and the DevTools capture workflow live in `docs/reverse-engineering.md`.
+Detailed protocol notes and the DevTools capture workflow live in [docs/reverse-engineering.md](docs/reverse-engineering.md).
