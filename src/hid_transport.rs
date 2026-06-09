@@ -107,7 +107,7 @@ pub fn open_selected_device(api: &HidApi, selector: &DeviceSelector) -> Result<H
             })
             .collect();
 
-        ranked.sort_by(|a, b| b.1.cmp(&a.1));
+        ranked.sort_by_key(|item| std::cmp::Reverse(item.1));
 
         if let Some((best, best_score)) = ranked.first().copied() {
             let next_score = ranked.get(1).map(|(_, s)| *s).unwrap_or(i32::MIN);
