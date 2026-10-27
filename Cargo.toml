@@ -13,3 +13,5 @@ clap = { version = "4.6.0", features = ["derive"] }
 hidapi = { version = "2.6.5", default-features = false, features = [
   "linux-static-hidraw",
 ] }
+serde_json = { version = "1.0.154", features = ["preserve_order"] }
+toml = "1.1.8"

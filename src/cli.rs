@@ -1,4 +1,5 @@
 use clap::{Args, Parser, Subcommand, ValueEnum};
+use std::path::PathBuf;
 
 #[derive(Parser, Debug)]
 #[command(name = "nuphyctl", about = "NuPhy keyboard control CLI")]
@@ -15,6 +16,8 @@ pub enum Command {
     List,
     /// RGB-related commands
     Rgb(RgbCommand),
+    /// Keymap commands (read, remap, back up and restore keys)
+    Keymap(KeymapCommand),
     /// Send a raw HID output report
     Raw(RawCommand),
 }
@@ -261,6 +264,187 @@ pub struct RgbDecorativeSetArgs {
 
     #[command(flatten)]
     pub device: DeviceSelector,
+}
+
+#[derive(Args, Debug)]
+pub struct KeymapCommand {
+    #[command(subcommand)]
+    pub action: KeymapSubcommand,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum KeymapSubcommand {
+    /// Show firmware version, current mode and keymap geometry
+    Info(KeymapInfoArgs),
+    /// Print the keymap (named keycodes and positions)
+    Dump(KeymapDumpArgs),
+    /// Print keys that differ from the factory keymap as an `apply` TOML file
+    Export(KeymapExportArgs),
+    /// Set one key, then read it back and verify
+    Set(KeymapSetArgs),
+    /// Apply a declarative TOML keymap file (only listed keys are touched)
+    Apply(KeymapApplyArgs),
+    /// Reset a mode's layers to the factory keymap
+    Reset(KeymapResetArgs),
+    /// Write a binary backup back to the keyboard (only differing keys)
+    RestoreBackup(KeymapRestoreBackupArgs),
+    /// List known keycode names
+    Keycodes(KeymapListArgs),
+    /// List named key positions (Air75 V3 layout)
+    Positions(KeymapListArgs),
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub enum KeymapMode {
+    Mac,
+    #[value(alias = "win")]
+    Windows,
+}
+
+impl KeymapMode {
+    pub const fn index(self) -> u8 {
+        match self {
+            Self::Mac => 0,
+            Self::Windows => 1,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub enum KeymapResetMode {
+    Mac,
+    #[value(alias = "win")]
+    Windows,
+    All,
+}
+
+#[derive(Args, Debug)]
+pub struct KeymapInfoArgs {
+    /// Print JSON
+    #[arg(long)]
+    pub json: bool,
+
+    #[command(flatten)]
+    pub device: DeviceSelector,
+}
+
+#[derive(Args, Debug)]
+pub struct KeymapDumpArgs {
+    /// Only this layer (number like 5, or mode.layer like windows.fn)
+    #[arg(long, conflicts_with = "mode")]
+    pub layer: Option<String>,
+
+    /// Only the layers of this mode
+    #[arg(long, value_enum)]
+    pub mode: Option<KeymapMode>,
+
+    /// Read the factory keymap (GetDefaultKeys) instead of the active one
+    #[arg(long)]
+    pub defaults: bool,
+
+    /// Only show keys that differ from the factory keymap
+    #[arg(long, conflicts_with = "defaults")]
+    pub changed: bool,
+
+    /// Also save the full keymap (all layers) as a binary backup to this file
+    #[arg(long, value_name = "FILE")]
+    pub raw_out: Option<PathBuf>,
+
+    /// Print JSON
+    #[arg(long)]
+    pub json: bool,
+
+    #[command(flatten)]
+    pub device: DeviceSelector,
+}
+
+#[derive(Args, Debug)]
+pub struct KeymapExportArgs {
+    #[command(flatten)]
+    pub device: DeviceSelector,
+}
+
+#[derive(Args, Debug)]
+pub struct KeymapSetArgs {
+    /// Layer (number like 4, or mode.layer like windows.base)
+    #[arg(long)]
+    pub layer: String,
+
+    /// Key position: name (F1, ESC, YELLOW, KNOB_CCW), row,col (3,12) or #index
+    pub position: String,
+
+    /// Keycode: name (BRID, F20, MISSION_CONTROL, MO(5), TRNS) or hex (0x00be)
+    pub code: String,
+
+    /// Show what would be written without writing
+    #[arg(long)]
+    pub dry_run: bool,
+
+    /// Print JSON
+    #[arg(long)]
+    pub json: bool,
+
+    #[command(flatten)]
+    pub device: DeviceSelector,
+}
+
+#[derive(Args, Debug)]
+pub struct KeymapApplyArgs {
+    /// TOML keymap file
+    pub file: PathBuf,
+
+    /// Show the diff without writing
+    #[arg(long)]
+    pub dry_run: bool,
+
+    /// Print JSON
+    #[arg(long)]
+    pub json: bool,
+
+    #[command(flatten)]
+    pub device: DeviceSelector,
+}
+
+#[derive(Args, Debug)]
+pub struct KeymapResetArgs {
+    /// Which layers to reset
+    #[arg(long, value_enum)]
+    pub mode: KeymapResetMode,
+
+    /// Confirm the reset (required)
+    #[arg(long)]
+    pub yes: bool,
+
+    /// Print JSON
+    #[arg(long)]
+    pub json: bool,
+
+    #[command(flatten)]
+    pub device: DeviceSelector,
+}
+
+#[derive(Args, Debug)]
+pub struct KeymapRestoreBackupArgs {
+    /// Binary backup (from `keymap dump --raw-out` or an automatic backup)
+    pub file: PathBuf,
+
+    /// Show the diff without writing
+    #[arg(long)]
+    pub dry_run: bool,
+
+    /// Print JSON
+    #[arg(long)]
+    pub json: bool,
+
+    #[command(flatten)]
+    pub device: DeviceSelector,
+}
+
+#[derive(Args, Debug)]
+pub struct KeymapListArgs {
+    /// Print JSON
+    #[arg(long)]
+    pub json: bool,
 }
 
 #[derive(Subcommand, Debug)]

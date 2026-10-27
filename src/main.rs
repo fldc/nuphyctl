@@ -2,6 +2,9 @@ mod app;
 mod cli;
 mod color;
 mod hid_transport;
+mod keycodes;
+mod keymap;
+mod keymap_cmd;
 mod nuphy_protocol;
 
 use anyhow::{Context, Result};

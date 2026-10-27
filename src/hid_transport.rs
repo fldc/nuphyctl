@@ -27,6 +27,34 @@ impl HidResponder {
         send_report(dev, report_id, packet)?;
         wait_for_response(dev, expected_cmd, self.timeout)
     }
+
+    /// Send a packet and wait for the first input report accepted by `matches`;
+    /// other reports (stale replies, unsolicited reports) are skipped.
+    pub fn send_and_expect_match(
+        &self,
+        dev: &HidDevice,
+        report_id: u8,
+        packet: &Report,
+        matches: impl Fn(&Report) -> bool,
+    ) -> Result<Report> {
+        send_report(dev, report_id, packet)?;
+        let started = Instant::now();
+        loop {
+            let elapsed = started.elapsed();
+            if elapsed >= self.timeout {
+                bail!(
+                    "timeout waiting for HID response command 0x{:02x}",
+                    packet[1]
+                );
+            }
+            let step = (self.timeout - elapsed).min(Duration::from_millis(80));
+            if let Some(report) = read_input_report(dev, step)?
+                && matches(&report)
+            {
+                return Ok(report);
+            }
+        }
+    }
 }
 
 pub fn list_devices(api: &HidApi) {

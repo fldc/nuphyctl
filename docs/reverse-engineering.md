@@ -77,6 +77,71 @@ Device targeting notes:
 - If no selector is passed, the CLI tries to auto-pick the most likely control interface.
 - When multiple candidates remain, prefer `--path` for exact reproduction during packet experiments.
 
+## Keymap protocol (implemented)
+
+Recovered from the NuPhy IO web app (drive.nuphy.io) and verified on an Air75 V3 running
+firmware 1.0.17.6.
+
+Data commands use the same 64-byte framing as the lighting packets, with the length in
+byte 4. `K` is the session key negotiated with `0xee` (with `K = 0` nothing is XORed):
+
+```text
+request:  55 cmd 00 sum  len^K addr_lo^K addr_hi^K 00^K  data^K ...
+reply:    aa cmd 00 sum  len^K addr_lo^K addr_hi^K 00^K  data^K ...
+```
+
+- `sum` is the wrapping sum of bytes `4..63`.
+- `addr` is a byte offset; `len` is at most 56 (64 minus the 8 header bytes).
+- Replies echo `len`/`addr`; `nuphyctl` matches replies on command, `len` and `addr`.
+
+Commands:
+
+| cmd | name | request | reply |
+| --- | --- | --- | --- |
+| `0xa0` | GetBase | `len 8 addr 0` | `mode, layerCount, layersPerMode, rows, cols, extra` |
+| `0xa1` | GetFirmwareInfo | `len 8 addr 0` | `b0 b1 b2 b3 b4 b5`: version `b2.b1.b0`, plus `.(b4 + 256*b5)` when `b3 == 0xaa` |
+| `0xb1` | GetDefaultKeys | `len n addr a` | `n` bytes of the factory keymap |
+| `0xb2` | GetUseKeys | `len n addr a` | `n` bytes of the active keymap |
+| `0xb3` | SetUseKeys | `len n addr a data` | ack |
+| `0xb4` | RestoreUseLayers | `len count addr first data = count zero bytes` | ack |
+
+There is no save/commit command: `SetUseKeys` writes persist across replugs.
+`RestoreUseLayers` copies the factory keymap over `count` layers starting at layer
+`first` (for example `len 4 addr 4` resets the Windows layers 4-7).
+
+`GetBase` on the Air75 V3 returns `01 08 04 06 10 82`: current mode Windows, 8 layers,
+4 per mode, a 6x16 matrix and `0x82`. When bit 7 of the last byte is set, its low bits
+give the number of extra (non-matrix) entries per layer (here 2); otherwise there are 2.
+
+Keymap layout:
+
+- Each layer is `2 * (rows * cols + extra)` bytes: 196 on the Air75 V3, 1568 for all 8 layers.
+- Entry `i` of layer `L` is at byte `L * 196 + 2 * i`, a big-endian 16-bit keycode.
+- Matrix keys come first (`i = row * 16 + col`), then the extras: `i = 96` knob
+  counter-clockwise (factory `0x00aa` Volume Down), `i = 97` knob clockwise (factory
+  `0x00a9` Volume Up).
+- Layers `0-3` are Mac mode, `4-7` Windows mode; in each, base, Fn (`MO(1)`/`MO(5)` on
+  the Fn key), and two further layers (factory: side-light controls on Fn+M and a Fn+X layer).
+
+Air75 V3 positions: row 0 is Esc `(0,0)`, F1-F12 `(0,1..12)`, PrtSc `(0,13)`, the yellow
+key `(0,14)` (factory Insert); `(0,15)` is empty. The red top-right key (the swappable knob
+module) is `(3,12)` (factory Mute). `nuphyctl keymap positions` lists the rest.
+
+Keycodes are QMK-style:
+
+- `0x0000` no key, `0x0001` transparent.
+- Basic HID usages `0x04-0xa4` and modifiers `0xe0-0xe7` as-is.
+- QMK consumer/system block: `0xa8` Mute, `0xa9`/`0xaa` Volume Up/Down, `0xab-0xaf` media,
+  `0xb0` Eject, `0xb1` Mail, `0xb2` Calculator, `0xb3` My Computer, `0xb4-0xba` browser keys,
+  `0xbd`/`0xbe` screen brightness up/down, `0xd1-0xdc` mouse.
+- `MO(n)` = `0x5220 | n`; QMK RGB codes `0x7820-0x782a`.
+- NuPhy codes `0x7e00 + n`, e.g. `0x7e01-0x7e05` USB/2.4G/BT1-3, `0x7e06` Mission Control
+  (Linux sees `KEY_SCALE`), `0x7e07` macOS search, `0x7e08` Siri (`KEY_VOICECOMMAND`),
+  `0x7e09` Launchpad, `0x7e0a`/`0x7e0b` full/area screenshot, `0x7e16` Do Not Disturb
+  (`KEY_DO_NOT_DISTURB`), `0x7e40`/`0x7e41` lock screen, `0x7e44` emoji.
+
+`nuphyctl keymap keycodes` prints the full catalogue.
+
 ## 1) Capture packets in Chrome
 
 Open <https://drive.nuphy.io/> in Chrome, then open DevTools Console and paste:

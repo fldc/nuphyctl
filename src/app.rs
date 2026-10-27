@@ -1,11 +1,13 @@
 use crate::cli::{
-    Cli, Command, DeviceSelector, RawSubcommand, RgbColorMode, RgbDecorativeSetArgs, RgbDirection,
-    RgbEffect, RgbSetArgs, RgbSideEffect, RgbSideSetArgs, RgbSubcommand,
+    Cli, Command, DeviceSelector, KeymapSubcommand, RawSubcommand, RgbColorMode,
+    RgbDecorativeSetArgs, RgbDirection, RgbEffect, RgbSetArgs, RgbSideEffect, RgbSideSetArgs,
+    RgbSubcommand,
 };
 use crate::color::{RgbColor, parse_hex_bytes};
 use crate::hid_transport::{
     REPORT_LEN, clear_input_reports, list_devices, open_selected_device, send_report,
 };
+use crate::keymap_cmd;
 use crate::nuphy_protocol::{KeyboardProtocol, MainLightSettings, SessionKey, SideLightSettings};
 use anyhow::{Result, bail};
 use hidapi::HidApi;
@@ -58,6 +60,17 @@ pub fn run(cli: Cli, api: &HidApi) -> Result<()> {
             RgbSubcommand::Set(args) => run_rgb_set(api, &args),
             RgbSubcommand::Side(args) => run_rgb_side(api, &args),
             RgbSubcommand::Decorative(args) => run_rgb_decorative(api, &args),
+        },
+        Command::Keymap(keymap) => match keymap.action {
+            KeymapSubcommand::Info(args) => keymap_cmd::run_info(api, &args),
+            KeymapSubcommand::Dump(args) => keymap_cmd::run_dump(api, &args),
+            KeymapSubcommand::Export(args) => keymap_cmd::run_export(api, &args),
+            KeymapSubcommand::Set(args) => keymap_cmd::run_set(api, &args),
+            KeymapSubcommand::Apply(args) => keymap_cmd::run_apply(api, &args),
+            KeymapSubcommand::Reset(args) => keymap_cmd::run_reset(api, &args),
+            KeymapSubcommand::RestoreBackup(args) => keymap_cmd::run_restore_backup(api, &args),
+            KeymapSubcommand::Keycodes(args) => keymap_cmd::run_keycodes(&args),
+            KeymapSubcommand::Positions(args) => keymap_cmd::run_positions(&args),
         },
         Command::Raw(raw) => match raw.action {
             RawSubcommand::Send(args) => run_raw_send(api, &args.device, args.report_id, &args.hex),
@@ -332,7 +345,7 @@ fn run_raw_send(api: &HidApi, selector: &DeviceSelector, report_id: u8, hex: &st
     Ok(())
 }
 
-fn is_retryable_rgb_error(err: &anyhow::Error) -> bool {
+pub(crate) fn is_retryable_rgb_error(err: &anyhow::Error) -> bool {
     err.chain().any(|cause| {
         let msg = cause.to_string().to_ascii_lowercase();
         RETRYABLE_RGB_ERROR_PATTERNS
@@ -360,7 +373,22 @@ fn parse_effect_color(
 }
 
 fn print_commands() {
-    const COMMANDS: &[&str] = &["list", "rgb set", "rgb side", "rgb decorative", "raw send"];
+    const COMMANDS: &[&str] = &[
+        "list",
+        "rgb set",
+        "rgb side",
+        "rgb decorative",
+        "keymap info",
+        "keymap dump",
+        "keymap export",
+        "keymap set",
+        "keymap apply",
+        "keymap reset",
+        "keymap restore-backup",
+        "keymap keycodes",
+        "keymap positions",
+        "raw send",
+    ];
 
     for command in COMMANDS {
         println!("{command}");
