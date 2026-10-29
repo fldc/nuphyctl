@@ -111,8 +111,9 @@ jobs:
           mkdir package
           cp target/${{ matrix.target }}/release/nuphyctl package/
           cp README.md LICENSE package/
+          cp -r docs package/
           cp udev/70-nuphyctl.rules package/
-          tar -C package -czf nuphyctl-${{ github.ref_name }}-${{ matrix.name }}.tar.gz nuphyctl README.md LICENSE 70-nuphyctl.rules
+          tar -C package -czf nuphyctl-${{ github.ref_name }}-${{ matrix.name }}.tar.gz nuphyctl README.md LICENSE 70-nuphyctl.rules docs
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
