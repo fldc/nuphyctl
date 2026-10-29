@@ -23,6 +23,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
+      - name: Validate udev rules
+        run: udevadm verify udev/70-nuphyctl.rules
       - name: Validate tag version
         run: |
           expected_tag="v$(python3 - <<'PY'
@@ -109,7 +111,8 @@ jobs:
           mkdir package
           cp target/${{ matrix.target }}/release/nuphyctl package/
           cp README.md LICENSE package/
-          tar -C package -czf nuphyctl-${{ github.ref_name }}-${{ matrix.name }}.tar.gz nuphyctl README.md LICENSE
+          cp udev/70-nuphyctl.rules package/
+          tar -C package -czf nuphyctl-${{ github.ref_name }}-${{ matrix.name }}.tar.gz nuphyctl README.md LICENSE 70-nuphyctl.rules
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7

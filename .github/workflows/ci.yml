@@ -17,6 +17,15 @@ permissions:
   contents: read
 
 jobs:
+  udev:
+    name: Udev rules
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - name: Validate udev rules
+        run: udevadm verify udev/70-nuphyctl.rules
+
   fmt:
     name: Format
     runs-on: ubuntu-latest

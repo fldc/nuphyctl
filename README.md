@@ -30,6 +30,36 @@ Or install it locally:
 cargo install --path .
 ```
 
+## Linux device permissions
+
+`nuphyctl` needs read/write access to the keyboard's `/dev/hidraw*` devices.
+Install the bundled udev rule to grant access to the **active local seat user**
+through systemd-logind, without running `nuphyctl` as root or making devices
+world-writable. The rule matches NuPhy USB devices (vendor ID `19f5`).
+
+The Arch `nuphyctl-bin` package installs this rule in
+`/usr/lib/udev/rules.d/70-nuphyctl.rules`. Arch's standard pacman hook reloads the
+rules and retriggers devices, including keyboards already plugged in.
+
+For source builds or `cargo install` (which does not install udev rules):
+
+```bash
+sudo install -Dm644 udev/70-nuphyctl.rules /etc/udev/rules.d/70-nuphyctl.rules
+sudo udevadm control --reload-rules
+sudo udevadm trigger --subsystem-match=hidraw --property-match=ID_VENDOR_ID=19f5 --action=change
+sudo udevadm settle
+```
+
+Release archives include `70-nuphyctl.rules` at the top level; use that path
+instead of `udev/70-nuphyctl.rules` when installing from an archive.
+Distribution packages should install it under `/usr/lib/udev/rules.d/`.
+
+Once installed, the rule also covers keyboards connected before login; no
+per-login trigger or replug is needed. If device retriggering is disabled on your
+system, run the commands above or replug the keyboard once after installation.
+The filename must sort before `73-seat-late.rules`, which applies the access ACL.
+SSH-only and other sessions without an active local seat are not granted access.
+
 ## Commands
 
 List HID devices visible to `hidapi`:
