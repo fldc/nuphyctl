@@ -1,7 +1,7 @@
 use crate::cli::{
     Cli, Command, DeviceSelector, KeymapSubcommand, RawSubcommand, RgbColorMode,
     RgbDecorativeSetArgs, RgbDirection, RgbEffect, RgbSetArgs, RgbSideEffect, RgbSideSetArgs,
-    RgbSubcommand,
+    RgbSubcommand, SettingsSubcommand,
 };
 use crate::color::{RgbColor, parse_hex_bytes};
 use crate::hid_transport::{
@@ -74,6 +74,10 @@ pub fn run(cli: Cli, api: &HidApi) -> Result<()> {
         },
         Command::Raw(raw) => match raw.action {
             RawSubcommand::Send(args) => run_raw_send(api, &args.device, args.report_id, &args.hex),
+        },
+        Command::Settings(settings) => match settings.action {
+            SettingsSubcommand::Get(args) => crate::settings_cmd::run_get(api, &args),
+            SettingsSubcommand::Set(args) => crate::settings_cmd::run_set(api, &args),
         },
     }
 }
@@ -375,6 +379,8 @@ fn parse_effect_color(
 fn print_commands() {
     const COMMANDS: &[&str] = &[
         "list",
+        "settings get",
+        "settings set",
         "rgb set",
         "rgb side",
         "rgb decorative",

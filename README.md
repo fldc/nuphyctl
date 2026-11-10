@@ -4,6 +4,7 @@
 
 - Set main/backlight, side-light, and decorative RGB effects.
 - Read, remap, back up, and restore keymaps, including declarative TOML configuration.
+- Read and set automatic sleep, both sleep timers, and the knob/button accessory switch.
 - List HID devices and send raw reports for reverse engineering.
 
 ## Installation
@@ -30,6 +31,7 @@ nuphyctl list
 nuphyctl rgb set --hex ff8800 --brightness 35
 nuphyctl keymap info
 nuphyctl keymap dump --changed
+nuphyctl settings get --accessory
 ```
 
 Use `nuphyctl --help` or `nuphyctl <command> --help` to explore the CLI.

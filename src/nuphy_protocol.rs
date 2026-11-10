@@ -18,6 +18,11 @@ const CMD_GET_DEFAULT_KEYS: u8 = 0xb1;
 const CMD_GET_USE_KEYS: u8 = 0xb2;
 const CMD_SET_USE_KEYS: u8 = 0xb3;
 const CMD_RESTORE_USE_LAYERS: u8 = 0xb4;
+const CMD_GET_SLEEP_INFO: u8 = 0xf3;
+const CMD_SET_SLEEP_CFG: u8 = 0xf5;
+const CMD_GET_APP_DEFINE: u8 = 0xfb;
+const CMD_SET_APP_DEFINE: u8 = 0xfc;
+const ACCESSORY_OFFSET: u16 = 168;
 
 const DATA_INFO_LEN: u8 = 8;
 const DATA_COMMAND_ATTEMPTS: usize = 3;
@@ -84,6 +89,38 @@ impl<'a> KeyboardProtocol<'a> {
 
     pub fn session_key(&self) -> SessionKey {
         self.session_key
+    }
+
+    /// NuPhy IO mechanical firmware: enable, shallow minutes, deep minutes,
+    /// and a reserved byte. Preserve the reserved byte when updating timers.
+    pub fn read_sleep_settings(&self) -> Result<[u8; 4]> {
+        let data = self
+            .data_command(CMD_GET_SLEEP_INFO, 0, 4, &[])
+            .context("GetSleepInfo failed; this firmware may not support sleep settings")?;
+        Ok(data
+            .try_into()
+            .expect("data_command returns requested length"))
+    }
+
+    pub fn write_sleep_settings(&self, data: &[u8; 4]) -> Result<()> {
+        self.data_command(CMD_SET_SLEEP_CFG, 0, 4, data)
+            .context("SetSleepCfg failed")?;
+        Ok(())
+    }
+
+    pub fn read_accessory(&self) -> Result<u8> {
+        let data = self
+            .data_command(CMD_GET_APP_DEFINE, ACCESSORY_OFFSET, 1, &[])
+            .context(
+                "cannot read accessory switch; use only on boards with a swappable knob/button",
+            )?;
+        Ok(data[0])
+    }
+
+    pub fn write_accessory(&self, value: u8) -> Result<()> {
+        self.data_command(CMD_SET_APP_DEFINE, ACCESSORY_OFFSET, 1, &[value])
+            .context("failed to write accessory switch")?;
+        Ok(())
     }
 
     pub fn set_main_light(&self, settings: MainLightSettings) -> Result<()> {
@@ -597,6 +634,28 @@ mod tests {
             &p[..12],
             &[0x55, 0xb4, 0x00, 0x08, 0x04, 0x04, 0x00, 0x00, 0, 0, 0, 0]
         );
+    }
+
+    #[test]
+    fn settings_packets_match_nuphy_io_data_commands() {
+        let key = SessionKey(0x5a);
+        for (cmd, addr, len, payload) in [
+            (CMD_GET_SLEEP_INFO, 0, 4, vec![]),
+            (CMD_SET_SLEEP_CFG, 0, 4, vec![1, 6, 24, 0xa5]),
+            (CMD_GET_APP_DEFINE, ACCESSORY_OFFSET, 1, vec![]),
+            (CMD_SET_APP_DEFINE, ACCESSORY_OFFSET, 1, vec![1]),
+        ] {
+            let packet = build_data_packet(cmd, addr, len, &payload, key).unwrap();
+            assert_eq!(packet[1], cmd);
+            assert_eq!(decode_data_header(&packet, key), (len, addr));
+            assert_eq!(packet[7] ^ key.value(), 0);
+            assert_eq!(packet[3], calc_checksum(&packet));
+            for (i, byte) in payload.iter().enumerate() {
+                assert_eq!(packet[8 + i] ^ key.value(), *byte);
+            }
+            let response = reply(cmd, len, addr, &payload, key.value());
+            assert!(parse_data_response(&response, cmd, addr, len, key).is_ok());
+        }
     }
 
     fn reply(cmd: u8, len: u8, addr: u16, data: &[u8], key: u8) -> Report {
