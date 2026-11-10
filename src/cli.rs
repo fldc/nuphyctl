@@ -18,6 +18,8 @@ pub enum Command {
     Rgb(RgbCommand),
     /// Keymap commands (read, remap, back up and restore keys)
     Keymap(KeymapCommand),
+    /// Keyboard sleep and accessory settings (NuPhy IO mechanical protocol)
+    Settings(SettingsCommand),
     /// Send a raw HID output report
     Raw(RawCommand),
 }
@@ -42,6 +44,79 @@ pub struct DeviceSelector {
     /// HID usage (hex like 0x0000 or decimal)
     #[arg(long, value_parser = parse_u16_any_base)]
     pub usage: Option<u16>,
+}
+
+#[derive(Args, Debug)]
+pub struct SettingsCommand {
+    #[command(subcommand)]
+    pub action: SettingsSubcommand,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum SettingsSubcommand {
+    /// Read sleep settings; optionally include the model-dependent accessory switch
+    Get(SettingsGetArgs),
+    /// Update only the specified settings, then read back and verify
+    Set(SettingsSetArgs),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+pub enum Accessory {
+    Knob,
+    #[value(alias = "key")]
+    Button,
+}
+
+impl Accessory {
+    pub const fn protocol_value(self) -> u8 {
+        match self {
+            Self::Knob => 0,
+            Self::Button => 1,
+        }
+    }
+}
+
+#[derive(Args, Debug)]
+pub struct SettingsGetArgs {
+    /// Also read the accessory switch (for boards with a swappable knob/button)
+    #[arg(long)]
+    pub accessory: bool,
+    #[arg(long)]
+    pub json: bool,
+    #[command(flatten)]
+    pub device: DeviceSelector,
+}
+
+#[derive(Args, Debug)]
+#[group(required = true, multiple = true, args = ["auto_sleep", "level1_minutes", "level2_minutes", "accessory"])]
+pub struct SettingsSetArgs {
+    /// Enable or disable automatic keyboard sleep (on/off)
+    #[arg(long, value_parser = parse_on_off)]
+    pub auto_sleep: Option<bool>,
+    /// Idle time for Level 1 sleep (lights off), in minutes
+    #[arg(long, value_parser = clap::value_parser!(u8).range(5..=127))]
+    pub level1_minutes: Option<u8>,
+    /// Level 2 sleep timer (lights and communication off), in minutes
+    #[arg(long, value_parser = clap::value_parser!(u8).range(5..=127))]
+    pub level2_minutes: Option<u8>,
+    /// Installed accessory on boards with a swappable knob/button
+    #[arg(long, value_enum)]
+    pub accessory: Option<Accessory>,
+    /// Show proposed settings without writing
+    #[arg(long)]
+    pub dry_run: bool,
+    #[arg(long)]
+    pub json: bool,
+    #[command(flatten)]
+    pub device: DeviceSelector,
+}
+
+fn parse_on_off(input: &str) -> Result<bool, String> {
+    match input {
+        "on" | "true" => Ok(true),
+        "off" | "false" => Ok(false),
+        _ => Err("expected on or off".into()),
+    }
 }
 
 #[derive(Subcommand, Debug)]

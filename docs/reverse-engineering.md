@@ -142,6 +142,34 @@ Keycodes are QMK-style:
 
 `nuphyctl keymap keycodes` prints the full catalogue.
 
+## Keyboard settings protocol (implemented)
+
+Recovered from NuPhy IO's `main.ba072d08.js` and settings chunk
+`829.01203ccb.chunk.js` at <https://drive.nuphy.io/> on 2026-11-10.
+These are data commands using the same session-key framing as keymap operations,
+not the legacy lighting subcommand format. This path is for mechanical firmware;
+HE models use a different configuration block.
+
+| cmd | name | address | length | data |
+| --- | --- | --- | --- | --- |
+| `0xf3` | GetSleepInfo | 0 | 4 | enable, Level 1 minutes, Level 2 minutes, reserved |
+| `0xf5` | SetSleepCfg | 0 | 1 or 4 | same fields |
+| `0xfb` | GetAppDefine | 168 | 1 | accessory: knob=0, button/key=1 |
+| `0xfc` | SetAppDefine | 168 | 1 | accessory: knob=0, button/key=1 |
+
+The web app writes one byte for the sleep toggle. For timer changes it reads four
+bytes, updates byte 1 or 2, and writes all four back. The CLI reads and preserves the
+four-byte block when updating any sleep setting. No extra apply command is used.
+The settings UI limits both timers to 5–127 minutes. The accessory offset applies
+to boards exposing the swappable control, including the Air75 V3.
+
+Live read on the connected Air75 V3 returned sleep bytes `01 06 18 00` and accessory
+`00`: auto-sleep on, Level 1 6 minutes, Level 2 24 minutes, knob. Changed-value writes
+still need hardware validation; read-back verification is implemented for writes.
+
+The Keyboard Layout selector calls the web app's local preference setter and reloads
+the page. It sends no HID command and is not a firmware setting.
+
 ## 1) Capture packets in Chrome
 
 Open <https://drive.nuphy.io/> in Chrome, then open DevTools Console and paste:

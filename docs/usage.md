@@ -25,6 +25,46 @@ Show help for a subcommand:
 cargo run -- rgb set --help
 ```
 
+## Keyboard settings
+
+Read sleep settings, optionally including the accessory switch:
+
+```bash
+cargo run -- settings get
+cargo run -- settings get --accessory --json
+```
+
+Update one or more settings:
+
+```bash
+cargo run -- settings set --auto-sleep on --level1-minutes 6 --level2-minutes 24
+cargo run -- settings set --auto-sleep off
+cargo run -- settings set --accessory knob
+cargo run -- settings set --accessory button
+cargo run -- settings set --level1-minutes 10 --dry-run
+```
+
+Both timers accept **5–127 minutes**, matching NuPhy IO. Level 1 turns off lighting;
+Level 2 disables lighting and communication and requires Level 1 sleep first.
+Disabling auto-sleep preserves both timers. Changing a timer preserves the sleep
+toggle, the other timer, and the reserved configuration byte.
+
+Writes are read back and verified; unchanged values are skipped. `--dry-run`
+reads the keyboard and prints the proposed values without writing. `--json` is
+available for both commands. All device selectors (such as `--path`) work here too.
+If an update to several settings fails partway through, earlier writes may have
+succeeded; use `settings get` to inspect the device before retrying.
+
+These commands use the NuPhy IO **mechanical keyboard protocol**, read successfully
+on an Air75 V3. HE models use a different configuration format and are not supported
+by these commands. Use accessory options only for boards with a swappable knob/button;
+`settings get` reads that model-dependent setting only when `--accessory` is passed.
+Hardware writes have not yet been validated with changed values.
+
+The web app's **Keyboard Layout** selector (for example US-ANSI-WIN) changes its
+virtual keyboard labels only. It does not change firmware or the operating system's
+layout, so there is no corresponding device setting in this CLI.
+
 ## Lighting examples
 
 Set a static backlight color (`#RRGGBB` or `RRGGBB`):
