@@ -20,7 +20,7 @@ permissions:
 jobs:
   verify:
     name: Verify release commit
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -60,7 +60,7 @@ jobs:
   build-linux:
     name: Build ${{ matrix.name }}
     needs: verify
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     permissions:
       contents: read
@@ -182,7 +182,7 @@ jobs:
   create-release:
     name: Create Release
     needs: build-linux
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: write

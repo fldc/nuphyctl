@@ -19,7 +19,7 @@ Provenance authenticates a workflow's claim connecting artifact digests to sourc
 and build identity. It does not independently establish that a build is safe or
 reproducible. Reproducible-build equivalence requires an independent rebuild and
 matching bytes. Rust and cross versions and action revisions are pinned, but the
-runner, system packages, and cross image are still mutable. Build records help
+Ubuntu 24.04 runner image, system packages, and cross image are still mutable. Build records help
 investigation; they are not a complete reproducible build environment. Archive
 timestamps, ownership, and ordering would also need normalization.
 
