@@ -37,5 +37,6 @@ Use `nuphyctl --help` or `nuphyctl <command> --help` to explore the CLI.
 ## Documentation
 
 - [Setup](docs/setup.md) — installation, building, and Linux device permissions.
+- [Release provenance](docs/releases.md) — verification and release/AUR packaging procedures.
 - [Command guide](docs/usage.md) — lighting effects, keymaps, backups, device selection, and raw reports.
 - [Reverse engineering](docs/reverse-engineering.md) — protocol notes and the DevTools capture workflow.

@@ -18,7 +18,10 @@ the rules and retriggers devices, including keyboards already plugged in.
 ## Release binaries
 
 Download the archive for your architecture (`linux-x86_64` or `linux-aarch64`)
-from [GitHub Releases](https://github.com/fldc/nuphyctl/releases), then extract it.
+from [GitHub Releases](https://github.com/fldc/nuphyctl/releases).
+For releases built with provenance support, [verify the archive and executable](releases.md#verify-a-release-before-installation)
+before extracting and installing them. Existing v0.6.1 assets have no established
+source-to-binary provenance.
 From the extracted directory:
 
 ```bash

@@ -12,6 +12,7 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  RELEASE_RUST_TOOLCHAIN: 1.98.0
 
 permissions:
   contents: read
@@ -22,11 +23,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Validate udev rules
         run: udevadm verify udev/70-nuphyctl.rules
       - name: Validate tag version
         run: |
+          if [[ "$GITHUB_REF" != refs/tags/v* ]]; then
+            echo "Releases must run from a version tag" >&2
+            exit 1
+          fi
           expected_tag="v$(python3 - <<'PY'
           import tomllib
 
@@ -42,6 +47,7 @@ jobs:
           fi
       - uses: ./.github/actions/setup-rust
         with:
+          toolchain: ${{ env.RELEASE_RUST_TOOLCHAIN }}
           components: rustfmt, clippy
           install-libudev: 'true'
       - name: Check formatting
@@ -56,6 +62,10 @@ jobs:
     needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     strategy:
       matrix:
         include:
@@ -66,17 +76,18 @@ jobs:
             name: linux-aarch64
             cross: true
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - uses: ./.github/actions/setup-rust
         with:
+          toolchain: ${{ env.RELEASE_RUST_TOOLCHAIN }}
           targets: ${{ matrix.target }}
           cache-key: ${{ matrix.target }}
           cache-targets: ${{ matrix.cross && 'false' || 'true' }}
 
       - name: Install cross
         if: matrix.cross
-        run: cargo install cross --locked
+        run: cargo install cross --locked --version 0.2.5
 
       - name: Install native build dependencies
         if: ${{ !matrix.cross }}
@@ -115,11 +126,58 @@ jobs:
           cp udev/70-nuphyctl.rules package/
           tar -C package -czf nuphyctl-${{ github.ref_name }}-${{ matrix.name }}.tar.gz nuphyctl README.md LICENSE 70-nuphyctl.rules docs
 
+      - name: Record build inputs and checksums
+        env:
+          BASE: nuphyctl-${{ github.ref_name }}-${{ matrix.name }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          {
+            echo "source_commit=$(git rev-parse HEAD)"
+            echo "source_ref=$GITHUB_REF"
+            echo "target=$TARGET"
+            echo "workflow_run=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT"
+            rustc --version --verbose
+            cargo --version
+            if [ "$TARGET" = aarch64-unknown-linux-gnu ]; then
+              cross --version
+              aarch64-linux-gnu-strip --version
+              docker image ls --digests --no-trunc
+            else
+              strip --version
+              cc --version
+            fi
+            dpkg-query -W
+          } > "$BASE.build-info.txt"
+          sha256sum "$BASE.tar.gz" > "$BASE.SHA256SUMS"
+          (cd package && sha256sum nuphyctl) >> "$BASE.SHA256SUMS"
+
+      # Attest the final stripped executable and the exact archive we upload.
+      - name: Attest release artifacts
+        id: provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: |
+            package/nuphyctl
+            nuphyctl-${{ github.ref_name }}-${{ matrix.name }}.tar.gz
+            nuphyctl-${{ github.ref_name }}-${{ matrix.name }}.SHA256SUMS
+            nuphyctl-${{ github.ref_name }}-${{ matrix.name }}.build-info.txt
+
+      - name: Preserve verification bundle
+        env:
+          BUNDLE: ${{ steps.provenance.outputs.bundle-path }}
+          BASE: nuphyctl-${{ github.ref_name }}-${{ matrix.name }}
+        run: cp "$BUNDLE" "$BASE.provenance.json"
+
       - name: Upload artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: nuphyctl-${{ matrix.name }}
-          path: nuphyctl-${{ github.ref_name }}-${{ matrix.name }}.tar.gz
+          if-no-files-found: error
+          path: |
+            nuphyctl-${{ github.ref_name }}-${{ matrix.name }}.tar.gz
+            nuphyctl-${{ github.ref_name }}-${{ matrix.name }}.provenance.json
+            nuphyctl-${{ github.ref_name }}-${{ matrix.name }}.SHA256SUMS
+            nuphyctl-${{ github.ref_name }}-${{ matrix.name }}.build-info.txt
 
   create-release:
     name: Create Release
@@ -129,17 +187,37 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
       - name: Download all artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           path: artifacts
+          pattern: nuphyctl-linux-*
+          merge-multiple: true
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: artifacts/**/*
-          generate_release_notes: true
-          draft: false
-          prerelease: false
+      - name: Verify downloaded release artifacts
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          commit=$(git rev-parse HEAD)
+          for arch in x86_64 aarch64; do
+            scripts/verify-release.sh "$RELEASE_TAG" "$commit" "$arch" artifacts
+          done
+
+      # Check drafts too: GitHub can allow multiple drafts for the same tag.
+      # Never attach newly built provenance to older assets or replace them.
+      - name: Create and publish a new release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases?per_page=100" > "$RUNNER_TEMP/releases.json"
+          if jq -e --arg tag "$RELEASE_TAG" 'any(.[][]; .tag_name == $tag)' "$RUNNER_TEMP/releases.json" > /dev/null; then
+            echo "A release or draft already exists for $RELEASE_TAG; refusing to replace it" >&2
+            exit 1
+          fi
+          gh release create "$RELEASE_TAG" artifacts/* \
+            --repo "$GITHUB_REPOSITORY" --verify-tag --draft --generate-notes
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false

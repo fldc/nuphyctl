@@ -2,6 +2,10 @@ name: Setup Rust
 description: Install Rust toolchain, optional system dependencies, and cache build artifacts
 
 inputs:
+  toolchain:
+    description: Rust toolchain version
+    required: false
+    default: stable
   components:
     description: Comma-separated Rust components to install
     required: false
@@ -32,13 +36,14 @@ runs:
       run: sudo apt-get update && sudo apt-get install -y libudev-dev
 
     - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@stable
+      uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
       with:
+        toolchain: ${{ inputs.toolchain }}
         components: ${{ inputs.components }}
         targets: ${{ inputs.targets }}
 
     - name: Cache Rust artifacts
-      uses: Swatinem/rust-cache@v2
+      uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       with:
         key: ${{ inputs.cache-key }}
         cache-targets: ${{ inputs.cache-targets }}
