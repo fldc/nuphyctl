@@ -2,7 +2,7 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 
 #[derive(Parser, Debug)]
-#[command(name = "nuphyctl", about = "NuPhy keyboard control CLI")]
+#[command(name = "nuphyctl", version, about = "NuPhy keyboard control CLI")]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Command,
