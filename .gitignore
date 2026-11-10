@@ -5,3 +5,7 @@ target/
 .playwright-cli/
 .playwright/
 .agents/
+
+# Python notice-generation tooling
+__pycache__/
+*.pyc

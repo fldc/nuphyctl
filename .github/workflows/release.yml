@@ -117,14 +117,25 @@ jobs:
             aarch64-linux-gnu-strip target/${{ matrix.target }}/release/nuphyctl
           fi
 
+      - name: Install Rust redistribution notices
+        run: rustup component add rust-docs --toolchain "$RELEASE_RUST_TOOLCHAIN"
+
+      - name: Generate third-party notices
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          python3 scripts/generate-notices.py --target "$TARGET" \
+            --binary "target/$TARGET/release/nuphyctl" \
+            --output THIRD-PARTY-NOTICES --rust-version "$RELEASE_RUST_TOOLCHAIN"
+
       - name: Package binary
         run: |
           mkdir package
           cp target/${{ matrix.target }}/release/nuphyctl package/
           cp README.md LICENSE package/
-          cp -r docs package/
+          cp -r docs THIRD-PARTY-NOTICES package/
           cp udev/70-nuphyctl.rules package/
-          tar -C package -czf nuphyctl-${{ github.ref_name }}-${{ matrix.name }}.tar.gz nuphyctl README.md LICENSE 70-nuphyctl.rules docs
+          tar -C package -czf nuphyctl-${{ github.ref_name }}-${{ matrix.name }}.tar.gz nuphyctl README.md LICENSE 70-nuphyctl.rules docs THIRD-PARTY-NOTICES
 
       - name: Record build inputs and checksums
         env:

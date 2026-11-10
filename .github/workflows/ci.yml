@@ -72,8 +72,12 @@ jobs:
       - uses: ./.github/actions/setup-rust
         with:
           install-libudev: 'true'
+          components: rust-docs
       - name: Run tests
         run: cargo test --all-features
+
+      - name: Test redistribution notice generation
+        run: python3 -m unittest discover -s tests -v
 
   build:
     name: Build

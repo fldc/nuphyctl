@@ -116,3 +116,31 @@ reviewed full source commit and workflow run, plus an AUR revision consuming tho
 exact assets. That addresses the provenance concern; marketplace maintainer
 approval remains a separate decision. A new release does not establish provenance
 for the old nuphyctl-bin 0.6.1-1 dependency.
+
+## Third-party attribution
+
+Future binary archives include `THIRD-PARTY-NOTICES/`. Its `components.json`
+records the default-feature Cargo graph for the target, versions, features,
+registry archive checksums, notice paths, executable digest, source commit, and
+Rust version. Original texts are taken from checksum-verified registry archives;
+HIDAPI's bundled C notices and Rust's standard-library copyright mapping and
+license texts are included. Build/proc-macro helpers are conservatively included
+and labeled separately. The graph does not assert which functions survive linking.
+System shared libraries remain supplied by the operating system.
+
+For existing v0.6.2 binaries, the manually dispatched `release-notices.yml`
+workflow publishes architecture-specific `*-notices.tar.gz` supplements with a
+separate attestation. It verifies the original archives/executables, checks out
+the original source commit, and generates notices with Rust 1.98.0 without
+executing or rebuilding the binaries. Existing signed archives stay intact.
+The supplement's attestation identifies the notice-generation workflow and its
+source commit; it is not a new attestation of the original binary build.
+
+Download the notice supplement alongside the matching v0.6.2 binary archive.
+AUR packaging must download both and install the notice tree under
+`/usr/share/licenses/nuphyctl-bin/THIRD-PARTY-NOTICES/`, preserving nested files
+and Rust's HTML/license links. Newer releases carry the same tree in the main
+archive. Check the supplement against its own attestation using
+`gh attestation verify` with signer workflow
+`fldc/nuphyctl/.github/workflows/release-notices.yml` and the expected generation
+commit, rather than the binary's source commit.

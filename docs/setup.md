@@ -22,11 +22,15 @@ from [GitHub Releases](https://github.com/fldc/nuphyctl/releases).
 For releases built with provenance support, [verify the archive and executable](releases.md#verify-a-release-before-installation)
 before extracting and installing them. Existing v0.6.1 assets have no established
 source-to-binary provenance.
+For v0.6.2, also download and extract the matching `*-notices.tar.gz` supplement
+from the same release. Future releases include `THIRD-PARTY-NOTICES/` directly.
 From the extracted directory:
 
 ```bash
 sudo install -Dm755 nuphyctl /usr/local/bin/nuphyctl
 sudo install -Dm644 70-nuphyctl.rules /etc/udev/rules.d/70-nuphyctl.rules
+sudo install -d /usr/local/share/licenses/nuphyctl
+sudo cp -R LICENSE THIRD-PARTY-NOTICES /usr/local/share/licenses/nuphyctl/
 ```
 
 Then [reload the rules](#reload-device-permissions).

@@ -1,0 +1,65 @@
+name: Release notice supplements
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-notices-v0.6.2
+  cancel-in-progress: false
+
+jobs:
+  notices:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: 91b5b1359220ed9a7bebc1c336194825f824e4ba
+          path: release-source
+      - uses: ./.github/actions/setup-rust
+        with:
+          toolchain: 1.98.0
+          components: rust-docs
+      - name: Verify original release and generate notice supplements
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir original supplements
+          gh release download v0.6.2 --repo fldc/nuphyctl --dir original
+          for arch in x86_64 aarch64; do
+            scripts/verify-release.sh v0.6.2 91b5b1359220ed9a7bebc1c336194825f824e4ba "$arch" original
+            mkdir -p "notice-$arch"
+            tar -xzf "original/nuphyctl-v0.6.2-linux-$arch.tar.gz" -C "notice-$arch" -- nuphyctl
+            python3 scripts/generate-notices.py --manifest-path release-source/Cargo.toml \
+              --target "$arch-unknown-linux-gnu" --binary "notice-$arch/nuphyctl" \
+              --output "notice-$arch/THIRD-PARTY-NOTICES" --rust-version 1.98.0
+            tar -C "notice-$arch" -czf "supplements/nuphyctl-v0.6.2-linux-$arch-notices.tar.gz" THIRD-PARTY-NOTICES
+          done
+      # These attestations describe notice generation, not the original binary build.
+      - name: Attest notice supplements
+        id: attest
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: supplements/*.tar.gz
+      - name: Verify and publish additional documentation assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUNDLE: ${{ steps.attest.outputs.bundle-path }}
+        run: |
+          cp "$BUNDLE" supplements/nuphyctl-v0.6.2-notices.provenance.json
+          for archive in supplements/*.tar.gz; do
+            gh attestation verify "$archive" --repo fldc/nuphyctl \
+              --signer-workflow fldc/nuphyctl/.github/workflows/release-notices.yml \
+              --source-digest "$GITHUB_SHA" --deny-self-hosted-runners --bundle "$BUNDLE"
+          done
+          sha256sum supplements/*.tar.gz
+          # No --clobber: published binaries, archives, and attestations stay intact.
+          gh release upload v0.6.2 supplements/* --repo fldc/nuphyctl
